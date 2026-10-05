@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test & vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-ed:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race -coverprofile=coverage.out ./...
+
+  # whodunit is a Windows tool, but every package must compile and pass tests
+  # on Linux: that is what keeps the non-Windows stubs honest. If someone
+  # forgets a build tag, this job catches it.
+  build:
+    name: Cross-compile
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - {goos: windows, goarch: amd64, ext: ".exe"}
+          - {goos: windows, goarch: arm64, ext: ".exe"}
+          - {goos: linux, goarch: amd64, ext: ""}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -o "dist/whodunit-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" ./cmd/whodunit
+
+  # The shipped rules are compiled into the binary. If one of them has a typo,
+  # the build still succeeds and users quietly lose a check — so assert the
+  # embedded set explicitly.
+  rules:
+    name: Embedded rules load
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Every embedded rule parses and is reachable
+        run: go test ./internal/rules/ -run 'TestLoadEmbeddedFindsShippedRules|TestEveryRuleIsReachableByQuery' -v

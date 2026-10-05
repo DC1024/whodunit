@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    name: Build and attach binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - {goos: windows, goarch: amd64, ext: ".exe"}
+          - {goos: windows, goarch: arm64, ext: ".exe"}
+          - {goos: linux, goarch: amd64, ext: ""}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          go build \
+            -trimpath \
+            -ldflags "-s -w -X main.version=${{ github.ref_name }}" \
+            -o "dist/whodunit-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" \
+            ./cmd/whodunit
+
+      # A checksum next to a diagnostic tool matters: people will run a
+      # downloaded .exe on a machine they are already worried about.
+      - name: Checksum
+        run: |
+          cd dist
+          sha256sum "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" \
+            > "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}.sha256"
+
+      - name: Package
+        run: |
+          cd dist
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}.zip" \
+              "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}.exe" \
+              "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}.sha256"
+          else
+            tar czf "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
+              "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}" \
+              "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}.sha256"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: whodunit-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.sha256
+
+  release:
+    name: Create GitHub Release
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/*.zip
+            artifacts/*.tar.gz
+            artifacts/*.sha256
+          generate_release_notes: true

@@ -1,0 +1,47 @@
+id: sleep-hibernate-disabled
+title: 休眠被关掉（powercfg /a 里没有 Hibernate、合盖行为异常）
+severity: warn
+symptom:
+  - 休眠
+  - hibernate
+  - 睡眠
+  - sleep
+  - 合盖
+  - powercfg
+  - hiberfil
+
+detect:
+  kind: registry
+  checks:
+    - path: 'HKLM\SYSTEM\CurrentControlSet\Control\Power'
+      name: HibernateEnabled
+      equals: '0'
+      note: 休眠被关闭（hiberfil.sys 已移除）
+
+    - path: 'HKLM\SYSTEM\CurrentControlSet\Control\Power'
+      name: HibernateEnabledDefault
+      equals: '0'
+      note: 默认休眠策略被关闭
+
+blame:
+  subject:
+    kind: registry_key
+    path: 'HKLM\SYSTEM\CurrentControlSet\Control\Power'
+    value: HibernateEnabled
+  sources:
+    - tool_fingerprint
+    - registry_lastwrite
+    - policy_origin
+    - event_audit
+
+fix:
+  - desc: 重新开启休眠并重建 hiberfil.sys
+    command: powercfg /h on
+  - desc: 确认休眠已可用
+    command: powercfg /a
+
+notes: >-
+  HibernateEnabled 默认是 1。变成 0 通常是两条路径之一：有人跑过 powercfg /h off
+  （为了省 C 盘空间，各类精简工具常带这一项），或者电源计划被导入覆盖。
+  它不影响睡眠（sleep），只影响休眠（hibernate）——关机菜单里"休眠"消失、
+  或者合盖后电池继续掉电，都指向这里。

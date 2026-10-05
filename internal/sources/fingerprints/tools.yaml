@@ -1,0 +1,79 @@
+# Fingerprints of third-party tools known to rewrite Windows configuration.
+#
+# Why this file exists: when a debloat or tuning utility flips a system
+# setting, the registry records the value but never the author. These tools
+# are the usual suspects, so matching one here turns "something changed this"
+# into "this program was here, and it does exactly that".
+#
+# Honesty contract:
+#   confidence: verified   - the path was confirmed on a real machine.
+#   confidence: unverified - derived from docs or source; may not exist on
+#                            every version. Reports say so explicitly.
+#
+# Adding a tool means adding an entry here. No Go code required.
+tools:
+  - id: winhance
+    name: Winhance
+    confidence: unverified
+    markers:
+      - {hive: HKCU, path: 'Software\Winhance'}
+      - {hive: HKLM, path: 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Winhance'}
+    change_logs:
+      - {hive: HKCU, path: 'Software\Winhance\ChangeHistory'}
+    note: >-
+      Winhance ships an answer-file driven debloat and applies its own Windows
+      Update and power settings. Its Windows Configurations view lists every
+      toggle it changed, which is the fastest way to revert selectively.
+
+  - id: unattended-winstall
+    name: UnattendedWinstall
+    confidence: unverified
+    markers:
+      - {hive: HKLM, path: 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\UnattendedWinstall'}
+    change_logs: []
+    note: >-
+      Applies an autounattend.xml at setup time and installs scheduled tasks
+      that re-remove apps on every boot. Its Windows Update section writes the
+      Policies keys that block feature updates.
+
+  - id: sophia-script
+    name: Sophia Script for Windows
+    confidence: unverified
+    markers:
+      - {hive: HKCU, path: 'Software\Sophia-Script'}
+      - {hive: HKLM, path: 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Sophia Script'}
+    change_logs: []
+    note: >-
+      A PowerShell module for fine-tuning Windows. Changes are re-applied by
+      re-running the wrapper, so reverting a single key may not stick.
+
+  - id: christitus-winutil
+    name: Chris Titus Tech WinUtil
+    confidence: unverified
+    markers:
+      - {hive: HKCU, path: 'Software\WinUtil'}
+    change_logs: []
+    note: >-
+      Applies tweaks through its own micro-winutil JSON. Re-running with the
+      default or recommended profile can silently re-apply earlier choices.
+
+  - id: ooshutup10
+    name: O&O ShutUp10++
+    confidence: unverified
+    markers:
+      - {hive: HKLM, path: 'SOFTWARE\O&O\ShutUp10'}
+      - {hive: HKLM, path: 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\O&O ShutUp10'}
+    change_logs: []
+    note: >-
+      Writes a large set of privacy and telemetry policy keys. ShutUp10 keeps
+      its own state so individual settings can be undone from its UI.
+
+  - id: privacy-sexy
+    name: privacy.sexy
+    confidence: unverified
+    markers:
+      - {hive: HKCU, path: 'Software\privacy.sexy'}
+    change_logs: []
+    note: >-
+      Generates scripts that write privacy and security policies. Reverting
+      means re-running the generated revert script, not deleting keys.

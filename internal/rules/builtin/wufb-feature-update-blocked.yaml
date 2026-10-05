@@ -1,0 +1,59 @@
+id: wufb-feature-update-blocked
+title: 功能更新被策略挡住（26H2 这类大版本装不上）
+severity: high
+symptom:
+  - 26h2
+  - 25h2
+  - 功能更新
+  - feature update
+  - 收不到更新
+  - 更新被禁用
+  - 更新开关灰化
+  - 由于你组织的策略
+  - wufb
+  - windows update
+
+detect:
+  kind: registry
+  checks:
+    - path: 'HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+      name: DisableWindowsUpdateAccess
+      equals: '1'
+      note: 禁止访问 Windows Update 服务
+
+    - path: 'HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU'
+      name: NoAutoUpdate
+      equals: '1'
+      note: 自动更新被关闭
+
+    - path: 'HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+      name: TargetReleaseVersion
+      equals: '1'
+      note: 版本被钉死在 TargetReleaseVersionInfo
+
+blame:
+  subject:
+    kind: registry_key
+    path: 'HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+    value: ''
+  sources:
+    - tool_fingerprint
+    - registry_lastwrite
+    - policy_origin
+    - event_audit
+
+fix:
+  - desc: 删除「禁止访问 Windows Update」策略值
+    command: reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" /v DisableWindowsUpdateAccess /f
+  - desc: 删除「关闭自动更新」策略值
+    command: reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoUpdate /f
+  - desc: 解除版本钉死
+    command: reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" /v TargetReleaseVersion /f
+  - desc: 让策略立刻生效（或重启）
+    command: gpupdate /force
+
+notes: >-
+  三个值任意一个为真，大版本升级就不会出现在 Windows Update 里。它们不在默认安装里，
+  一定是某个东西写进去的：组策略、MDM、或者某个优化/精简工具。
+  注意顺序——如果是 MDM 或计划任务在持续下发，删了键过一会儿还会回来，
+  所以先看证据链里 policy_origin 那一条再动手。

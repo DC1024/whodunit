@@ -21,10 +21,17 @@ func NewRegistryLastWrite() Source { return registryLastWrite{} }
 func (registryLastWrite) Name() string { return "registry_lastwrite" }
 
 func (registryLastWrite) Investigate(ctx Context, subject model.Subject) ([]model.Evidence, error) {
+	// A service or a power setting is still configured somewhere on disk, and
+	// that key carries a FILETIME. Subjects declare RegistryPath to point at
+	// it; without one there is nothing to timestamp.
+	path := subject.Path
 	if subject.Kind != "registry_key" {
+		path = subject.RegistryPath
+	}
+	if path == "" {
 		return nil, nil
 	}
-	hive, rest := probe.SplitHive(subject.Path)
+	hive, rest := probe.SplitHive(path)
 	at, err := ctx.Registry.KeyLastWrite(hive, rest)
 	if err != nil {
 		if errors.Is(err, probe.ErrUnsupported) {

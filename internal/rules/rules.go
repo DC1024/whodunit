@@ -17,10 +17,19 @@ import (
 )
 
 // Check is one predicate that decides whether the rule applies.
+//
+// Which fields matter depends on the detect kind:
+//
+//	registry : path + name
+//	service  : field (service name) + property (state | start_type)
+//	powercfg : field (sleep state, e.g. hibernate) - equals available/unavailable
+//	printer  : field (default | offline | count) + property (optional filter)
 type Check struct {
 	Path     string `yaml:"path"`     // HKLM\SOFTWARE\Policies\...\AU
 	Name     string `yaml:"name"`     // NoAutoUpdate
-	Equals   string `yaml:"equals"`   // "1"
+	Field    string `yaml:"field"`    // wuauserv, hibernate, default
+	Property string `yaml:"property"` // state, start_type
+	Equals   string `yaml:"equals"`   // "1", DISABLED, unavailable
 	Exists   *bool  `yaml:"exists"`   // present / absent
 	Required bool   `yaml:"required"` // when true, a miss fails the whole rule
 	Note     string `yaml:"note"`     // shown when this check trips

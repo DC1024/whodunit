@@ -1,0 +1,39 @@
+id: no-default-printer
+title: 没有默认打印机（点打印时无从选择）
+severity: info
+symptom:
+  - 没有默认打印机
+  - 找不到打印机
+  - 无法打印
+  - no default printer
+  - 打印
+
+detect:
+  kind: printer
+  checks:
+    - field: default
+      exists: false
+      note: 系统里没有任何一台打印机被设为默认
+
+blame:
+  subject:
+    kind: printer
+    path: default
+    registry_path: 'HKCU\Software\Microsoft\Windows NT\CurrentVersion\Windows'
+  sources:
+    - tool_fingerprint
+    - registry_lastwrite
+    - event_audit
+
+fix:
+  - desc: 打开打印机设置挑一台设为默认
+    command: start ms-settings:printers
+  - desc: 顺手确认打印后台处理服务是活的
+    command: sc query spooler
+
+notes: >-
+  没有默认打印机通常是三件事之一：从来没设过、设过的那台被删了或离线了、
+  或者打印后台处理服务（spooler）没起来导致枚举不出来。
+  这条查的是「当前实际有没有」，用的是 CIM 查询而不是注册表，
+  因为注册表里残留的默认打印机名字会指向一台早就不存在的设备。
+  如果你明明设过默认打印机却报这条，先去查 spooler 服务。

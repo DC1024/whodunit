@@ -1,0 +1,46 @@
+id: wuauserv-service-disabled
+title: Windows Update 服务被禁用（0x80070422 那类报错）
+severity: high
+symptom:
+  - 0x80070422
+  - 更新服务
+  - wuauserv
+  - 服务被禁用
+  - windows update service
+
+detect:
+  kind: service
+  checks:
+    - field: wuauserv
+      property: start_type
+      equals: DISABLED
+      note: Windows Update 服务的启动类型被设为「禁用」
+
+blame:
+  subject:
+    kind: service
+    path: wuauserv
+    value: start_type
+    # 服务的启动类型就存在这个键里，所以连它也能取到 FILETIME——
+    # 服务本身不是注册表值，但它的配置是。
+    registry_path: 'HKLM\SYSTEM\CurrentControlSet\Services\wuauserv'
+  sources:
+    - tool_fingerprint
+    - registry_lastwrite
+    - event_audit
+
+fix:
+  - desc: 恢复为按需启动（Windows 需要时会自己拉起）
+    command: sc config wuauserv start= demand
+  - desc: 一并恢复依赖的后台传输服务
+    command: sc config bits start= delayed-auto
+  - desc: 确认结果
+    command: sc qc wuauserv
+
+notes: >-
+  报 0x80070422 基本就是它：wuauserv 的启动类型被改成 DISABLED。
+  值得区分「被停止」和「被禁用」——停止是临时的，禁用是有人明确设置的，
+  所以看 start_type 而不是 state。
+  常见的写手有三类：精简工具的"禁用更新"开关、企业镜像的基线、
+  以及某个你忘了的优化脚本。如果改回来过一会儿又被禁用，
+  去查计划任务——有些工具是每次开机重新写一次的。

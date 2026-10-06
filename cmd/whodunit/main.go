@@ -223,7 +223,7 @@ func cmdWhy(args []string, stdout, stderr io.Writer) int {
 
 func investigate(rs []*rules.Rule, jsonOut bool, stdout, stderr io.Writer) ([]*model.Finding, int) {
 	reg := probe.NewRegistry()
-	eng := engine.New(reg, sources.New(), time.Now())
+	eng := engine.New(reg, probe.NewCommands(), sources.New(), time.Now())
 	findings, err := eng.EvaluateAll(rs)
 	if err != nil {
 		fmt.Fprintf(stderr, "investigation failed: %v\n", err)

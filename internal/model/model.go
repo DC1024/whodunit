@@ -53,19 +53,36 @@ func (g Grade) String() string {
 	return string(g)
 }
 
-// Subject is the thing we are trying to explain: usually one registry value.
+// Subject is the thing we are trying to explain.
+//
+// Kind is how the check reaches it: registry_key, service, power_setting or
+// printer. RegistryPath is the escape hatch that keeps non-registry subjects
+// attributable: a service is configured under
+// HKLM\SYSTEM\CurrentControlSet\Services\<name>, so pointing at that key lets
+// the timestamp source work even when the subject itself is not a registry
+// value. Without it, a service rule could detect but never attribute.
 type Subject struct {
-	Kind  string `json:"kind"`  // registry_key, service, power_setting, printer
-	Path  string `json:"path"`  // HKLM\SOFTWARE\Policies\...
-	Value string `json:"value"` // NoAutoUpdate
+	Kind         string `json:"kind" yaml:"kind"`                   // registry_key, service, power_setting, printer
+	Path         string `json:"path" yaml:"path"`                   // HKLM\SOFTWARE\Policies\...
+	Value        string `json:"value" yaml:"value"`                 // NoAutoUpdate
+	RegistryPath string `json:"registry_path,omitempty" yaml:"registry_path,omitempty"`
 }
 
 // String renders a subject the way an engineer would paste it into a terminal.
 func (s Subject) String() string {
-	if s.Value != "" {
-		return fmt.Sprintf("%s\\%s", s.Path, s.Value)
+	if s.Kind == "registry_key" {
+		if s.Value != "" {
+			return fmt.Sprintf("%s\\%s", s.Path, s.Value)
+		}
+		return s.Path
 	}
-	return s.Path
+	if s.Path != "" {
+		return fmt.Sprintf("%s:%s", s.Kind, s.Path)
+	}
+	if s.Value != "" {
+		return fmt.Sprintf("%s:%s", s.Kind, s.Value)
+	}
+	return s.Kind
 }
 
 // Evidence is one independent observation about the subject.

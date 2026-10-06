@@ -1,0 +1,42 @@
+id: hibernate-unavailable
+title: 休眠不可用（powercfg /a 里没有 Hibernate）
+severity: warn
+symptom:
+  - 休眠
+  - hibernate
+  - 睡不下去
+  - powercfg
+  - 合盖
+
+detect:
+  kind: powercfg
+  checks:
+    - field: hibernate
+      equals: unavailable
+      note: powercfg 报告这台机器不支持休眠
+
+blame:
+  subject:
+    kind: power_setting
+    path: hibernate
+    registry_path: 'HKLM\SYSTEM\CurrentControlSet\Control\Power'
+  sources:
+    - tool_fingerprint
+    - registry_lastwrite
+    - event_audit
+
+fix:
+  - desc: 重新开启休眠（会重建 hiberfil.sys）
+    command: powercfg /h on
+  - desc: 确认现在有哪些睡眠状态可用
+    command: powercfg /a
+  - desc: 如果提示固件不支持，看是不是开了现代待机
+    command: powercfg /a
+
+notes: >-
+  这条查的是「实际可用」，不是「注册表里写了什么」——powercfg 会综合
+  固件能力、现代待机（Connected Standby）、组策略和 hiberfil.sys 是否存在后给出结论。
+  所以注册表说 HibernateEnabled=1 但 powercfg 说不可用，是正常且常见的：
+  开了现代待机的机器本就不支持传统休眠。那时候别硬开，改用待机即可。
+  同一台机器上这条规则和 sleep-hibernate-disabled（看注册表）结论可能不同，
+  两个都跑一遍才分得清是「被关掉」还是「根本不支持」。

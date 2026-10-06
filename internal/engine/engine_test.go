@@ -1,11 +1,13 @@
 package engine
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/DC1024/whodunit/internal/model"
+	"github.com/DC1024/whodunit/internal/probe"
 	"github.com/DC1024/whodunit/internal/rules"
 	"github.com/DC1024/whodunit/internal/sources"
 )
@@ -79,9 +81,46 @@ func rule(t *testing.T, id string) *rules.Rule {
 	return nil
 }
 
+// fakeCommands replays canned command output. Anything it has no answer for
+// fails, which is how a missing service or an absent powercfg is modelled.
+type fakeCommands struct {
+	out map[string]string
+}
+
+func (f *fakeCommands) Available() bool { return true }
+
+func (f *fakeCommands) Output(name string, args ...string) (string, error) {
+	key := strings.Join(append([]string{name}, args...), " ")
+	if f.out != nil {
+		if v, ok := f.out[key]; ok {
+			return v, nil
+		}
+		// Fall back to matching the program alone: the PowerShell inventory
+		// command has a long script argument nobody wants to retype.
+		if v, ok := f.out[name]; ok {
+			return v, nil
+		}
+	}
+	return "", errors.New("no canned output for: " + key)
+}
+
+// unavailableCommands models a non-Windows build, where no external command
+// can run. Rules depending on one must report skipped, never clean.
+type unavailableCommands struct{}
+
+func (unavailableCommands) Available() bool { return false }
+
+func (unavailableCommands) Output(name string, args ...string) (string, error) {
+	return "", probe.ErrUnsupported
+}
+
 func newEngine(reg *fakeRegistry) *Engine {
+	return newEngineWith(reg, &fakeCommands{})
+}
+
+func newEngineWith(reg *fakeRegistry, cmds probe.Commands) *Engine {
 	now := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
-	return New(reg, sources.New(), now)
+	return New(reg, cmds, sources.New(), now)
 }
 
 // A tool's own change history is grade A: it is the tool admitting it.
@@ -229,13 +268,13 @@ func TestPrinterRuleCleanWhenUserControlsDefault(t *testing.T) {
 	}
 }
 
-// Detect kinds other than registry are not implemented yet. The finding must
-// say so instead of silently reporting "clean", which would be a lie.
+// A detect kind with no handler must be reported as skipped. Silently treating
+// it as "clean" would tell the user their machine is fine when nobody looked.
 func TestUnimplementedDetectKindIsReported(t *testing.T) {
 	r := &rules.Rule{
-		ID:     "test-power-kind",
-		Title:  "powercfg based rule",
-		Detect: rules.Detect{Kind: "powercfg"},
+		ID:     "test-cim-kind",
+		Title:  "cim based rule",
+		Detect: rules.Detect{Kind: "cim"},
 	}
 	f, err := newEngine(newFakeRegistry()).Evaluate(r)
 	if err != nil {
@@ -285,5 +324,143 @@ func TestGradeAShortCircuitsFurtherSources(t *testing.T) {
 	}
 	if f.Culprit == nil || f.Culprit.Grade != model.GradeA {
 		t.Fatalf("culprit = %v, want grade A", f.Culprit)
+	}
+}
+
+func TestServiceRuleDetectsDisabledStartType(t *testing.T) {
+	cmds := &fakeCommands{out: map[string]string{
+		"sc qc wuauserv": "SERVICE_NAME: wuauserv\n        START_TYPE         : 4   DISABLED\n",
+	}}
+	f, err := newEngineWith(newFakeRegistry(), cmds).Evaluate(rule(t, "wuauserv-service-disabled"))
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if !f.Detected {
+		t.Fatal("start_type DISABLED must be detected")
+	}
+	if !strings.Contains(f.Current, "DISABLED") {
+		t.Errorf("current = %q, want it to name DISABLED", f.Current)
+	}
+}
+
+// Stopped is not disabled. A rule that conflates the two would send people
+// chasing a problem they do not have.
+func TestServiceRuleCleanWhenMerelyStopped(t *testing.T) {
+	cmds := &fakeCommands{out: map[string]string{
+		"sc qc wuauserv": "SERVICE_NAME: wuauserv\n        START_TYPE         : 3   DEMAND_START\n",
+	}}
+	f, err := newEngineWith(newFakeRegistry(), cmds).Evaluate(rule(t, "wuauserv-service-disabled"))
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if f.Detected {
+		t.Error("DEMAND_START is normal; the rule must stay clean")
+	}
+}
+
+// A service that does not exist makes sc.exe fail. That is a miss, not an
+// investigation error.
+func TestServiceMissingIsACleanMiss(t *testing.T) {
+	f, err := newEngineWith(newFakeRegistry(), &fakeCommands{}).Evaluate(rule(t, "wuauserv-service-disabled"))
+	if err != nil {
+		t.Fatalf("a missing service must not fail the run: %v", err)
+	}
+	if f.Detected {
+		t.Error("no service, no finding")
+	}
+}
+
+func TestServiceRuleSkippedWhenCommandsUnavailable(t *testing.T) {
+	f, err := newEngineWith(newFakeRegistry(), unavailableCommands{}).Evaluate(rule(t, "wuauserv-service-disabled"))
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if f.Unsupported == "" {
+		t.Error("without sc.exe the rule must report skipped, not clean")
+	}
+	if f.Detected {
+		t.Error("skipped must never also be detected")
+	}
+}
+
+func TestPowercfgRuleDetectsHibernateUnavailable(t *testing.T) {
+	cmds := &fakeCommands{out: map[string]string{
+		"powercfg /a": "The following sleep states are available on this system:\n" +
+			"    Standby (S0 Low Power Idle) Network Connected\n\n" +
+			"The following sleep states are not available on this system:\n" +
+			"    Hibernate\n",
+	}}
+	f, err := newEngineWith(newFakeRegistry(), cmds).Evaluate(rule(t, "hibernate-unavailable"))
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if !f.Detected {
+		t.Fatal("hibernate listed as unavailable must be detected")
+	}
+}
+
+func TestPowercfgRuleCleanWhenHibernateWorks(t *testing.T) {
+	cmds := &fakeCommands{out: map[string]string{
+		"powercfg /a": "The following sleep states are available on this system:\n" +
+			"    Standby (S0 Low Power Idle) Network Connected\n" +
+			"    Hibernate\n",
+	}}
+	f, err := newEngineWith(newFakeRegistry(), cmds).Evaluate(rule(t, "hibernate-unavailable"))
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if f.Detected {
+		t.Error("hibernate available means nothing to report")
+	}
+}
+
+func TestPrinterRuleDetectsMissingDefault(t *testing.T) {
+	cmds := &fakeCommands{out: map[string]string{
+		"powershell": "Fax\tFalse\tFalse\n",
+	}}
+	f, err := newEngineWith(newFakeRegistry(), cmds).Evaluate(rule(t, "no-default-printer"))
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if !f.Detected {
+		t.Fatal("no printer flagged default must be detected")
+	}
+}
+
+func TestPrinterRuleCleanWhenADefaultExists(t *testing.T) {
+	cmds := &fakeCommands{out: map[string]string{
+		"powershell": "HP LaserJet\tTrue\tFalse\nFax\tFalse\tFalse\n",
+	}}
+	f, err := newEngineWith(newFakeRegistry(), cmds).Evaluate(rule(t, "no-default-printer"))
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if f.Detected {
+		t.Error("a default printer exists; nothing to report")
+	}
+}
+
+// The point of Subject.RegistryPath: a service is not a registry value, but
+// its configuration is stored in one. Without this, non-registry rules could
+// detect the symptom but never attribute it to a moment in time.
+func TestNonRegistrySubjectStillGetsATimestampThroughRegistryPath(t *testing.T) {
+	changed := time.Date(2026, 9, 3, 7, 41, 22, 0, time.UTC)
+	reg := newFakeRegistry().
+		SetTime("HKLM", `SYSTEM\CurrentControlSet\Services\wuauserv`, changed)
+	cmds := &fakeCommands{out: map[string]string{
+		"sc qc wuauserv": "SERVICE_NAME: wuauserv\n        START_TYPE         : 4   DISABLED\n",
+	}}
+	f, err := newEngineWith(reg, cmds).Evaluate(rule(t, "wuauserv-service-disabled"))
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if !f.Detected {
+		t.Fatal("expected the service rule to fire")
+	}
+	if f.Culprit == nil || f.Culprit.Grade != model.GradeC {
+		t.Fatalf("culprit = %v, want grade C from the service key's FILETIME", f.Culprit)
+	}
+	if !f.Culprit.At.Equal(changed) {
+		t.Errorf("time = %s, want %s", f.Culprit.At, changed)
 	}
 }

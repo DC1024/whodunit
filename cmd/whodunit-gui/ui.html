@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>whodunit</title>
+<style>
+  :root{
+    --bg:#fff; --soft:#f6f8fb; --ink:#0f1b2a; --muted:#4a5a70; --faint:#7b8a9c;
+    --line:#e2e8f0; --blue:#1f6feb; --blue-deep:#0b4fc4; --wash:#eaf2ff;
+    --red:#c0392b; --amber:#b8860b; --green:#1e7a4d;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--sans);background:var(--soft);color:var(--ink);line-height:1.6}
+  header{background:#fff;border-bottom:1px solid var(--line);padding:14px 22px;
+         display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:5}
+  .logo{font-weight:700;font-size:17px;letter-spacing:-.02em}
+  .logo span{color:var(--faint);font-weight:400;font-size:12px;margin-left:8px}
+  .spacer{flex:1}
+  button{font:inherit;font-size:14px;border-radius:8px;border:1px solid var(--line);
+         background:#fff;color:var(--ink);padding:7px 14px;cursor:pointer}
+  button:hover{border-color:var(--blue);color:var(--blue)}
+  button.primary{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+  button.primary:hover{background:var(--blue-deep);color:#fff}
+  button:disabled{opacity:.55;cursor:default}
+  main{max-width:900px;margin:0 auto;padding:22px}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:18px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input[type=text]{flex:1;min-width:240px;font:inherit;font-size:15px;padding:8px 12px;
+                   border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+  input[type=text]:focus{outline:none;border-color:var(--blue)}
+  .hint{color:var(--faint);font-size:13px;margin-top:8px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .chip{font-size:12.5px;background:var(--soft);border:1px solid var(--line);border-radius:999px;
+        padding:4px 11px;cursor:pointer;color:var(--muted)}
+  .chip:hover{border-color:var(--blue);color:var(--blue)}
+  #report{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px 22px;
+          font-size:14.5px;display:none}
+  #report h1{font-size:22px;margin:0 0 12px}
+  #report h2{font-size:18px;margin:24px 0 8px;padding-top:14px;border-top:1px solid var(--line)}
+  #report h2:first-of-type{border-top:0;padding-top:0}
+  #report table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13.5px}
+  #report th,#report td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  #report th{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint)}
+  #report ul{padding-left:20px;margin:8px 0}
+  #report li{margin:3px 0}
+  #report code{font-family:var(--mono);font-size:12.5px;background:var(--soft);
+               padding:1px 5px;border-radius:4px;word-break:break-all}
+  #report pre{background:#0f1720;color:#dbe6f2;border-radius:8px;padding:12px 14px;
+              overflow-x:auto;font-family:var(--mono);font-size:12.5px}
+  #report pre code{background:none;color:inherit;padding:0}
+  .gA{color:var(--red);font-weight:700} .gB{color:var(--amber);font-weight:700}
+  .gC{color:var(--blue);font-weight:700} .gD{color:var(--faint);font-weight:700}
+  .attr{color:var(--red);font-weight:600}
+  .empty{color:var(--faint);padding:26px 4px;text-align:center;font-size:14px}
+  .status{color:var(--muted);font-size:13.5px;padding:8px 0;min-height:20px}
+  .banner{background:var(--wash);border:1px solid #bcd4f7;border-radius:8px;
+          padding:11px 14px;font-size:13.5px;color:var(--muted);margin-bottom:16px}
+  footer{max-width:900px;margin:0 auto;padding:6px 22px 30px;color:var(--faint);font-size:12.5px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">whodunit <span id="sub">配置归因</span></div>
+  <div class="spacer"></div>
+  <button id="lang">English</button>
+  <button id="quit">退出</button>
+</header>
+
+<main>
+  <div class="banner" id="banner">只读：whodunit 不会修改任何设置。它只报告「谁改的」，并把改回去的命令打印给你——跑不跑由你决定。</div>
+
+  <div class="panel">
+    <div class="row">
+      <input type="text" id="q" placeholder="描述症状，例如：26H2 装不上 / 休眠不见了 / 默认打印机自己变">
+      <button class="primary" id="why">归因</button>
+      <button id="scan">扫描全部</button>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div id="report"></div>
+</main>
+
+<footer>
+  <span id="foot">报告与命令行版完全一致（同一段 Markdown），可以直接复制粘贴到论坛求助。</span>
+</footer>
+
+<script>
+var T = {
+  zh: {
+    sub:"配置归因", quit:"退出",
+    banner:"只读：whodunit 不会修改任何设置。它只报告「谁改的」，并把改回去的命令打印给你——跑不跑由你决定。",
+    ph:"描述症状，例如：26H2 装不上 / 休眠不见了 / 默认打印机自己变",
+    why:"归因", scan:"扫描全部",
+    scanning:"正在扫描全部规则…", attributing:"正在归因…",
+    none:"没有命中任何规则。这不代表机器没问题——只代表内置规则没发现这几种症状。",
+    foot:"报告与命令行版完全一致（同一段 Markdown），可以直接复制粘贴到论坛求助。",
+    quitDone:"已退出，可以关闭浏览器标签了。",
+    err:"出错了："
+  },
+  en: {
+    sub:"configuration attribution", quit:"Quit",
+    banner:"Read-only: whodunit changes nothing. It reports who changed a setting and prints the revert commands — running them is your call.",
+    ph:"Describe the symptom, e.g. 26H2 not offered / hibernate missing / default printer keeps changing",
+    why:"Attribute", scan:"Scan all",
+    scanning:"Scanning every rule…", attributing:"Attributing…",
+    none:"No rule matched. That does not mean the machine is fine — only that the shipped rules do not cover this symptom.",
+    foot:"The report is byte-identical to the CLI's (same markdown), ready to paste into a forum thread.",
+    quitDone:"Stopped. You can close this tab.",
+    err:"Something went wrong: "
+  }
+};
+
+var lang = "zh";
+
+function t(k){ return T[lang][k]; }
+
+function applyLang(){
+  document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+  document.getElementById("sub").textContent = t("sub");
+  document.getElementById("quit").textContent = t("quit");
+  document.getElementById("banner").textContent = t("banner");
+  document.getElementById("q").placeholder = t("ph");
+  document.getElementById("why").textContent = t("why");
+  document.getElementById("scan").textContent = t("scan");
+  document.getElementById("foot").textContent = t("foot");
+  document.getElementById("lang").textContent = lang === "zh" ? "English" : "中文";
+  loadRules();
+}
+
+document.getElementById("lang").onclick = function(){
+  lang = lang === "zh" ? "en" : "zh";
+  applyLang();
+};
+
+function esc(s){
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function inline(s){
+  // Order matters: `code` spans must be protected before **bold** rewriting.
+  var out = "";
+  var re = /`([^`]+)`/g, last = 0, m;
+  while ((m = re.exec(s)) !== null){
+    out += esc(s.slice(last, m.index)).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    out += "<code>" + esc(m[1]) + "</code>";
+    last = m.index + m[0].length;
+  }
+  out += esc(s.slice(last)).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  return out;
+}
+
+// Small, deliberate renderer: it only has to cover what report.Markdown emits
+// (h1/h2, bullet lists, grade tables, indented code blocks). No library, no
+// network fetch — the page ships inside the binary.
+function mdToHtml(md){
+  var lines = md.split("\n"), html = "", i = 0;
+  function closeList(){ if (inUl){ html += "</ul>"; inUl = false; } }
+  var inUl = false, inPre = false;
+  for (; i < lines.length; i++){
+    var ln = lines[i];
+
+    if (/^```/.test(ln)){
+      closeList();
+      if (inPre){ html += "</code></pre>"; inPre = false; }
+      else { html += "<pre><code>"; inPre = true; }
+      continue;
+    }
+    if (inPre){ html += esc(ln) + "\n"; continue; }
+
+    if (/^\s*\|/.test(ln)){
+      closeList();
+      var cells = ln.split("|").slice(1, -1).map(function(c){ return c.trim(); });
+      if (cells.length && /^[-: ]+$/.test(cells[0])) continue; // separator row
+      var next = lines[i+1] || "";
+      var isHead = /^\s*\|/.test(next) && /^[-: ]+$/.test((next.split("|").slice(1,-1)[0]||"").trim());
+      var tag = isHead ? "th" : "td";
+      if (isHead) html += "<table><thead><tr>";
+      html += "<tr>";
+      cells.forEach(function(c){
+        var v = inline(c);
+        if (!isHead) v = v.replace(/\b([ABCD])\b/g, function(mm,g){ return '<span class="g'+g+'">'+g+'</span>'; });
+        html += "<"+tag+">" + v + "</"+tag+">";
+      });
+      html += "</tr>";
+      if (isHead) html += "</tr></thead><tbody>";
+      continue;
+    }
+    closeListIfTableDone();
+    function closeListIfTableDone(){}
+
+    if (/^#{1,6}\s/.test(ln)){
+      closeList();
+      var lvl = ln.match(/^#+/)[0].length;
+      var text = inline(ln.replace(/^#+\s*/, ""));
+      text = text.replace(/\[DETECTED\]/, '<span class="attr">[DETECTED]</span>');
+      html += "<h" + lvl + ">" + text + "</h" + lvl + ">";
+      continue;
+    }
+    if (/^\s*[-*]\s+/.test(ln) || /^\s+\S/.test(ln)){
+      if (!inUl){ html += "<ul>"; inUl = true; }
+      var item = inline(ln.replace(/^\s*[-*]\s+/, "").trim());
+      item = item.replace(/(attributed to|归因)[:：]/, '<span class="attr">$&</span>');
+      html += "<li>" + item + "</li>";
+      continue;
+    }
+    if (/^\s*\d+\.\s+/.test(ln)){
+      closeList();
+      html += "<p>" + inline(ln.trim()) + "</p>";
+      continue;
+    }
+    if (ln.trim() === ""){ closeList(); continue; }
+    closeList();
+    html += "<p>" + inline(ln.trim()) + "</p>";
+  }
+  if (inPre) html += "</code></pre>";
+  closeList();
+  // A table opened by a header row needs closing.
+  var opens = (html.match(/<tbody>/g) || []).length, closes = (html.match(/<\/tbody>/g) || []).length;
+  if (opens > closes) html += "</tbody></table>";
+  return html;
+}
+
+function show(markdown, matched){
+  var box = document.getElementById("report");
+  box.style.display = "block";
+  if (markdown && markdown.trim()){
+    box.innerHTML = mdToHtml(markdown);
+  } else {
+    box.innerHTML = '<div class="empty">' + esc(t("none")) + "</div>";
+  }
+  document.getElementById("status").textContent =
+    matched > 0 ? (lang === "zh" ? ("命中 " + matched + " 条规则") : (matched + " rule(s) matched")) : "";
+}
+
+function busy(msg){
+  document.getElementById("status").textContent = msg;
+  document.getElementById("scan").disabled = true;
+  document.getElementById("why").disabled = true;
+}
+function idle(){
+  document.getElementById("scan").disabled = false;
+  document.getElementById("why").disabled = false;
+}
+
+function post(url, body){
+  return fetch(url, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body)
+  }).then(function(r){
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  });
+}
+
+function loadRules(){
+  fetch("/api/rules?lang=" + lang).then(function(r){ return r.json(); }).then(function(items){
+    var box = document.getElementById("chips");
+    box.innerHTML = "";
+    items.forEach(function(it){
+      var b = document.createElement("button");
+      b.className = "chip";
+      b.textContent = (it.symptom && it.symptom[0]) ? it.symptom[0] : it.id;
+      b.title = it.title + " (" + it.id + ")";
+      b.onclick = function(){
+        document.getElementById("q").value = b.textContent;
+        runWhy();
+      };
+      box.appendChild(b);
+    });
+  }).catch(function(){ /* chips are a convenience; the scan button still works */ });
+}
+
+function runWhy(){
+  var q = document.getElementById("q").value.trim();
+  busy(t("attributing"));
+  post("/api/why", {query: q, lang: lang}).then(function(res){
+    idle();
+    if (res.message && !res.markdown){
+      document.getElementById("status").textContent = res.message;
+      show("", 0);
+      return;
+    }
+    show(res.markdown, res.matched);
+  }).catch(function(e){
+    idle();
+    document.getElementById("status").textContent = t("err") + e.message;
+  });
+}
+
+function runScan(){
+  busy(t("scanning"));
+  post("/api/scan", {lang: lang}).then(function(res){
+    idle();
+    if (res.message && !res.markdown){
+      document.getElementById("status").textContent = res.message;
+      show("", 0);
+      return;
+    }
+    show(res.markdown, res.matched);
+  }).catch(function(e){
+    idle();
+    document.getElementById("status").textContent = t("err") + e.message;
+  });
+}
+
+document.getElementById("why").onclick = runWhy;
+document.getElementById("scan").onclick = runScan;
+document.getElementById("q").addEventListener("keydown", function(e){
+  if (e.key === "Enter") runWhy();
+});
+document.getElementById("quit").onclick = function(){
+  document.getElementById("status").textContent = t("quitDone");
+  fetch("/api/quit", {method: "POST"}).catch(function(){});
+};
+
+(function(){
+  var l = (navigator.language || "zh").toLowerCase();
+  lang = l.indexOf("zh") === 0 ? "zh" : "en";
+  applyLang();
+})();
+</script>
+</body>
+</html>

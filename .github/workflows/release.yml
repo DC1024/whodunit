@@ -9,6 +9,9 @@ permissions:
   contents: write
 
 jobs:
+  # whodunit only runs on Windows, so only Windows binaries are published.
+  # CI still cross-compiles linux/amd64, but that is a test target: it keeps
+  # the non-Windows stubs honest, not something a user should download.
   binaries:
     name: Build and attach binaries
     runs-on: ubuntu-latest
@@ -17,7 +20,6 @@ jobs:
         include:
           - {goos: windows, goarch: amd64, ext: ".exe"}
           - {goos: windows, goarch: arm64, ext: ".exe"}
-          - {goos: linux, goarch: amd64, ext: ""}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,46 +28,53 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # Two binaries ship in one archive: the CLI for scripts, and the GUI for
+      # someone who just wants to double-click something. The GUI is built with
+      # -H windowsgui so opening it does not flash a console window.
       - name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
         env:
           CGO_ENABLED: 0
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
+          set -euo pipefail
           mkdir -p dist
+          target="${{ matrix.goos }}-${{ matrix.goarch }}"
           go build \
             -trimpath \
             -ldflags "-s -w -X main.version=${{ github.ref_name }}" \
-            -o "dist/whodunit-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" \
+            -o "dist/whodunit-${target}${{ matrix.ext }}" \
             ./cmd/whodunit
+          go build \
+            -trimpath \
+            -ldflags "-s -w -H windowsgui -X main.version=${{ github.ref_name }}" \
+            -o "dist/whodunit-gui-${target}${{ matrix.ext }}" \
+            ./cmd/whodunit-gui
 
       # A checksum next to a diagnostic tool matters: people will run a
       # downloaded .exe on a machine they are already worried about.
       - name: Checksum
         run: |
           cd dist
-          sha256sum "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" \
-            > "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}.sha256"
+          target="${{ matrix.goos }}-${{ matrix.goarch }}"
+          sha256sum "whodunit-${target}${{ matrix.ext }}" > "whodunit-${target}.sha256"
+          sha256sum "whodunit-gui-${target}${{ matrix.ext }}" > "whodunit-gui-${target}.sha256"
 
       - name: Package
         run: |
           cd dist
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            zip "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}.zip" \
-              "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}.exe" \
-              "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}.sha256"
-          else
-            tar czf "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
-              "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}" \
-              "whodunit-${{ matrix.goos }}-${{ matrix.goarch }}.sha256"
-          fi
+          target="${{ matrix.goos }}-${{ matrix.goarch }}"
+          zip "whodunit-${target}.zip" \
+            "whodunit-${target}${{ matrix.ext }}" \
+            "whodunit-gui-${target}${{ matrix.ext }}" \
+            "whodunit-${target}.sha256" \
+            "whodunit-gui-${target}.sha256"
 
       - uses: actions/upload-artifact@v4
         with:
           name: whodunit-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
             dist/*.zip
-            dist/*.tar.gz
             dist/*.sha256
 
   release:
@@ -83,6 +92,5 @@ jobs:
         with:
           files: |
             artifacts/*.zip
-            artifacts/*.tar.gz
             artifacts/*.sha256
           generate_release_notes: true

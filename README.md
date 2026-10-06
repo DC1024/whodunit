@@ -154,8 +154,10 @@ Shipped rules:
   deleting the key fixes it for fifteen minutes. Check `policy_origin` first.
 - **Windows only.** On other platforms it reports "skipped" rather than
   inventing an answer.
-- **Rule text is currently Chinese.** The author's reports are written for
-  Chinese-speaking users first; translations are welcome as pull requests.
+- **Fingerprints cover a handful of tools.** The shipped set knows about
+  Winhance, ShutUp10 and friends; a debloat tool not in
+  `internal/sources/fingerprints/tools.yaml` cannot be named, no matter how
+  obvious it is. Adding one is a YAML edit — pull requests welcome.
 
 ## License
 

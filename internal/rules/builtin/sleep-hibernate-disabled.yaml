@@ -1,5 +1,6 @@
 id: sleep-hibernate-disabled
 title: 休眠被关掉（powercfg /a 里没有 Hibernate、合盖行为异常）
+title_en: Hibernate was turned off (no Hibernate in powercfg /a, lid behavior odd)
 severity: warn
 symptom:
   - 休眠
@@ -36,8 +37,10 @@ blame:
 
 fix:
   - desc: 重新开启休眠并重建 hiberfil.sys
+    desc_en: Re-enable hibernation and rebuild hiberfil.sys
     command: powercfg /h on
   - desc: 确认休眠已可用
+    desc_en: Confirm hibernation is available
     command: powercfg /a
 
 notes: >-
@@ -45,3 +48,10 @@ notes: >-
   （为了省 C 盘空间，各类精简工具常带这一项），或者电源计划被导入覆盖。
   它不影响睡眠（sleep），只影响休眠（hibernate）——关机菜单里"休眠"消失、
   或者合盖后电池继续掉电，都指向这里。
+
+notes_en: >-
+  HibernateEnabled defaults to 1. Hitting 0 is usually one of two paths: someone
+  ran powercfg /h off (to free C: space — a favorite of debloat tools), or a
+  power plan was imported over the top. It does not affect sleep, only hibernate:
+  the Hibernate entry vanishes from the shutdown menu, or the battery keeps
+  draining after you close the lid — both point here.

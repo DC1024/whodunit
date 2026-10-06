@@ -64,7 +64,14 @@ whodunit why "<symptom>"       match rules by symptom, then attribute
 ```
 
 Flags: `-json` for machine-readable output, `-rules <dir>` to load your own
-rule files instead of the built-in set.
+rule files instead of the built-in set, `-lang <code>` to pick the report
+language (`auto` / `en` / `zh`; default `auto`, which follows the system
+locale — an English shell gets an English report, a Chinese Windows stays
+Chinese).
+
+Every rule ships both Chinese and English copy. With `-lang en` the title, the
+explanation and the revert steps all switch to English, so the report pastes
+cleanly into an English-language forum thread.
 
 Exit codes: `0` nothing matched, `1` something matched, `2` usage or runtime
 error. That makes it usable in a script or a logon task.

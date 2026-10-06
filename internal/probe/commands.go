@@ -74,9 +74,9 @@ func ParseServiceStartType(out string) (string, bool) {
 // knownSleepStates maps the state name used in rule YAML onto the tokens that
 // can appear in `powercfg /a` output, in English and in Chinese.
 var knownSleepStates = map[string][]string{
-	"hibernate": {"hibernate", "休眠"},
-	"standby":   {"standby", "待机"},
-	"s0":        {"s0", "s0"},
+	"hibernate":   {"hibernate", "休眠"},
+	"standby":     {"standby", "待机"},
+	"s0":          {"s0", "s0"},
 	"faststartup": {"fast startup", "快速启动"},
 }
 

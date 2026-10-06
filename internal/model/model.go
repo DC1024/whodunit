@@ -62,9 +62,9 @@ func (g Grade) String() string {
 // the timestamp source work even when the subject itself is not a registry
 // value. Without it, a service rule could detect but never attribute.
 type Subject struct {
-	Kind         string `json:"kind" yaml:"kind"`                   // registry_key, service, power_setting, printer
-	Path         string `json:"path" yaml:"path"`                   // HKLM\SOFTWARE\Policies\...
-	Value        string `json:"value" yaml:"value"`                 // NoAutoUpdate
+	Kind         string `json:"kind" yaml:"kind"`   // registry_key, service, power_setting, printer
+	Path         string `json:"path" yaml:"path"`   // HKLM\SOFTWARE\Policies\...
+	Value        string `json:"value" yaml:"value"` // NoAutoUpdate
 	RegistryPath string `json:"registry_path,omitempty" yaml:"registry_path,omitempty"`
 }
 
@@ -114,8 +114,19 @@ func (e Evidence) CulpritLine() string {
 // FixStep is a revert action. whodunit prints these; it does not run them
 // unless the user passes --fix, and even then it prints first.
 type FixStep struct {
-	Desc    string `json:"desc"`
-	Command string `json:"command"`
+	Desc    string `json:"desc" yaml:"desc"`
+	DescEn  string `json:"desc_en,omitempty" yaml:"desc_en,omitempty"`
+	Command string `json:"command" yaml:"command"`
+}
+
+// LocalDesc returns the localized description. English is used only when the
+// caller asked for it and the rule actually ships an English string; otherwise
+// the original (Chinese) description is returned so output never goes blank.
+func (s FixStep) LocalDesc(lang string) string {
+	if lang == "en" && s.DescEn != "" {
+		return s.DescEn
+	}
+	return s.Desc
 }
 
 // Finding is what whodunit says about one rule.

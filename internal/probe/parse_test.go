@@ -31,10 +31,10 @@ func TestParseServiceStateMissing(t *testing.T) {
 
 func TestParseServiceStartType(t *testing.T) {
 	cases := map[string]string{
-		"        START_TYPE         : 4   DISABLED\n":                 "DISABLED",
-		"        START_TYPE         : 2   AUTO_START\n":               "AUTO_START",
-		"        START_TYPE         : 2   AUTO_START  (DELAYED)\n":    "AUTO_START",
-		"        START_TYPE         : 3   DEMAND_START\n":             "DEMAND_START",
+		"        START_TYPE         : 4   DISABLED\n":              "DISABLED",
+		"        START_TYPE         : 2   AUTO_START\n":            "AUTO_START",
+		"        START_TYPE         : 2   AUTO_START  (DELAYED)\n": "AUTO_START",
+		"        START_TYPE         : 3   DEMAND_START\n":          "DEMAND_START",
 	}
 	for out, want := range cases {
 		if got, ok := ParseServiceStartType(out); !ok || got != want {

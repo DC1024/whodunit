@@ -36,6 +36,7 @@ usage:
 flags:
   -json          emit JSON instead of markdown
   -rules <dir>   load rules from a directory instead of the built-in set
+  -lang <code>   report language: auto | en | zh (default auto)
   -version       print version and exit
 
 exit codes:
@@ -78,9 +79,11 @@ var (
 	knownFlags = map[string]bool{
 		"-json": true, "--json": true,
 		"-rules": true, "--rules": true,
+		"-lang": true, "--lang": true,
 	}
 	valueFlags = map[string]bool{
 		"-rules": true, "--rules": true,
+		"-lang": true, "--lang": true,
 	}
 )
 
@@ -112,12 +115,43 @@ func hoistFlags(args []string) []string {
 	return append(flagsArgs, text...)
 }
 
-func newFlagSet(name string, stderr io.Writer) (*flag.FlagSet, *bool) {
+func newFlagSet(name string, stderr io.Writer) (*flag.FlagSet, *bool, *string) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonOut := fs.Bool("json", false, "emit JSON instead of markdown")
 	fs.Bool("version", false, "print version")
-	return fs, jsonOut
+	lang := fs.String("lang", "auto", "report language: auto | en | zh")
+	return fs, jsonOut, lang
+}
+
+// resolveLang turns the -lang flag into a concrete language code. "auto"
+// inspects common locale env vars and falls back to zh; anything unrecognised
+// also falls back to zh so a typo never produces an empty report.
+func resolveLang(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "en", "english":
+		return "en"
+	case "zh", "cn", "chinese":
+		return "zh"
+	default:
+		return detectLang()
+	}
+}
+
+// detectLang reads the process locale. On a Chinese Windows box LANG is usually
+// unset, so the default report stays Chinese; an English shell on CI or Linux
+// gets an English report without an explicit flag.
+func detectLang() string {
+	for _, v := range []string{"LANG", "LC_ALL", "LANGUAGE", "LC_MESSAGES"} {
+		val := strings.ToLower(os.Getenv(v))
+		if val == "" {
+			continue
+		}
+		if strings.HasPrefix(val, "en") || strings.Contains(val, "en_us") || strings.Contains(val, "en_gb") {
+			return "en"
+		}
+	}
+	return "zh"
 }
 
 func loadRules(dir string, stderr io.Writer) ([]*rules.Rule, bool) {
@@ -138,10 +172,11 @@ func reportParseErrors(errs []error, stderr io.Writer) {
 }
 
 func cmdRules(args []string, stdout, stderr io.Writer) int {
-	fs, jsonOut := newFlagSet("rules", stderr)
+	fs, jsonOut, langFlag := newFlagSet("rules", stderr)
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	lang := resolveLang(*langFlag)
 	rs, ok := loadRules("", stderr)
 	if !ok {
 		fmt.Fprintln(stderr, "no rules available")
@@ -157,7 +192,7 @@ func cmdRules(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	for _, r := range rs {
-		fmt.Fprintf(stdout, "%-32s %s\n", r.ID, r.Title)
+		fmt.Fprintf(stdout, "%-32s %s\n", r.ID, r.LocalTitle(lang))
 		if len(r.Symptom) > 0 {
 			fmt.Fprintf(stdout, "%-32s try: whodunit why \"%s\"\n", "", r.Symptom[0])
 		}
@@ -166,17 +201,18 @@ func cmdRules(args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdScan(args []string, stdout, stderr io.Writer) int {
-	fs, jsonOut := newFlagSet("scan", stderr)
+	fs, jsonOut, langFlag := newFlagSet("scan", stderr)
 	rulesDir := fs.String("rules", "", "directory of rule YAML files")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	lang := resolveLang(*langFlag)
 	rs, ok := loadRules(*rulesDir, stderr)
 	if !ok {
 		fmt.Fprintln(stderr, "no rules available")
 		return 2
 	}
-	findings, code := investigate(rs, *jsonOut, stdout, stderr)
+	findings, code := investigate(rs, *jsonOut, lang, stdout, stderr)
 	if code != 0 {
 		return code
 	}
@@ -185,11 +221,12 @@ func cmdScan(args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdWhy(args []string, stdout, stderr io.Writer) int {
-	fs, jsonOut := newFlagSet("why", stderr)
+	fs, jsonOut, langFlag := newFlagSet("why", stderr)
 	rulesDir := fs.String("rules", "", "directory of rule YAML files")
 	if err := fs.Parse(hoistFlags(args)); err != nil {
 		return 2
 	}
+	lang := resolveLang(*langFlag)
 	query := strings.Join(fs.Args(), " ")
 	if strings.TrimSpace(query) == "" {
 		fmt.Fprintln(stderr, `why needs a symptom, e.g. why "26H2 not offered"`)
@@ -213,7 +250,7 @@ func cmdWhy(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "run 'whodunit rules' to see what is covered")
 		return 0
 	}
-	findings, code := investigate(matched, *jsonOut, stdout, stderr)
+	findings, code := investigate(matched, *jsonOut, lang, stdout, stderr)
 	if code != 0 {
 		return code
 	}
@@ -221,9 +258,9 @@ func cmdWhy(args []string, stdout, stderr io.Writer) int {
 	return exitCodeFor(findings)
 }
 
-func investigate(rs []*rules.Rule, jsonOut bool, stdout, stderr io.Writer) ([]*model.Finding, int) {
+func investigate(rs []*rules.Rule, jsonOut bool, lang string, stdout, stderr io.Writer) ([]*model.Finding, int) {
 	reg := probe.NewRegistry()
-	eng := engine.New(reg, probe.NewCommands(), sources.New(), time.Now())
+	eng := engine.New(reg, probe.NewCommands(), sources.New(), time.Now(), lang)
 	findings, err := eng.EvaluateAll(rs)
 	if err != nil {
 		fmt.Fprintf(stderr, "investigation failed: %v\n", err)

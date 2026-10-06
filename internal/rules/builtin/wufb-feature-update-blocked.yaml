@@ -1,5 +1,6 @@
 id: wufb-feature-update-blocked
 title: 功能更新被策略挡住（26H2 这类大版本装不上）
+title_en: Feature updates blocked by policy (26H2-class upgrades won't install)
 severity: high
 symptom:
   - 26h2
@@ -44,12 +45,16 @@ blame:
 
 fix:
   - desc: 删除「禁止访问 Windows Update」策略值
+    desc_en: Delete the "block access to Windows Update" policy value
     command: reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" /v DisableWindowsUpdateAccess /f
   - desc: 删除「关闭自动更新」策略值
+    desc_en: Delete the "turn off automatic updates" policy value
     command: reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoUpdate /f
   - desc: 解除版本钉死
+    desc_en: Release the version pin
     command: reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" /v TargetReleaseVersion /f
   - desc: 让策略立刻生效（或重启）
+    desc_en: Apply the policy immediately (or reboot)
     command: gpupdate /force
 
 notes: >-
@@ -57,3 +62,10 @@ notes: >-
   一定是某个东西写进去的：组策略、MDM、或者某个优化/精简工具。
   注意顺序——如果是 MDM 或计划任务在持续下发，删了键过一会儿还会回来，
   所以先看证据链里 policy_origin 那一条再动手。
+
+notes_en: >-
+  Any one of these three values being true hides the big upgrade from Windows
+  Update. None of them ship in a default install — something wrote them: group
+  policy, MDM, or some optimization/debloat tool. Mind the order — if MDM or a
+  scheduled task keeps pushing them, deleting the keys brings them back after a
+  while, so read the policy_origin line in the evidence chain before you act.

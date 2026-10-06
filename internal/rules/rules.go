@@ -52,18 +52,39 @@ type Blames struct {
 type Rule struct {
 	ID       string          `yaml:"id"`
 	Title    string          `yaml:"title"`
+	TitleEn  string          `yaml:"title_en,omitempty"`
 	Symptom  []string        `yaml:"symptom"`  // free-text keywords users type after `why`
 	Severity string          `yaml:"severity"` // info | warn | high
 	Detect   Detect          `yaml:"detect"`
 	Blame    Blames          `yaml:"blame"`
 	Fix      []model.FixStep `yaml:"fix"`
 	Notes    string          `yaml:"notes"`
+	NotesEn  string          `yaml:"notes_en,omitempty"`
 
 	path string
 }
 
 // Path returns the file the rule came from, for error messages.
 func (r *Rule) Path() string { return r.path }
+
+// LocalTitle returns the title in the requested language. English is used only
+// when asked for and the rule ships an English title; otherwise the original
+// title is returned so the listing never goes blank.
+func (r *Rule) LocalTitle(lang string) string {
+	if lang == "en" && r.TitleEn != "" {
+		return r.TitleEn
+	}
+	return r.Title
+}
+
+// LocalNotes returns the explanation in the requested language, with the same
+// English-when-available fallback as LocalTitle.
+func (r *Rule) LocalNotes(lang string) string {
+	if lang == "en" && r.NotesEn != "" {
+		return r.NotesEn
+	}
+	return r.Notes
+}
 
 // Matches reports whether any symptom keyword appears in the query.
 func (r *Rule) Matches(query string) bool {

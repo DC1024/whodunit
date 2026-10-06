@@ -1,5 +1,6 @@
 id: hibernate-unavailable
 title: 休眠不可用（powercfg /a 里没有 Hibernate）
+title_en: Hibernate is unavailable (powercfg /a shows no Hibernate)
 severity: warn
 symptom:
   - 休眠
@@ -27,10 +28,13 @@ blame:
 
 fix:
   - desc: 重新开启休眠（会重建 hiberfil.sys）
+    desc_en: Re-enable hibernation (recreates hiberfil.sys)
     command: powercfg /h on
   - desc: 确认现在有哪些睡眠状态可用
+    desc_en: Confirm which sleep states are available now
     command: powercfg /a
   - desc: 如果提示固件不支持，看是不是开了现代待机
+    desc_en: If it says the firmware does not support it, check whether Modern Standby is on
     command: powercfg /a
 
 notes: >-
@@ -40,3 +44,13 @@ notes: >-
   开了现代待机的机器本就不支持传统休眠。那时候别硬开，改用待机即可。
   同一台机器上这条规则和 sleep-hibernate-disabled（看注册表）结论可能不同，
   两个都跑一遍才分得清是「被关掉」还是「根本不支持」。
+
+notes_en: >-
+  This checks what is actually available, not what the registry says: powercfg
+  weighs firmware capability, Modern Standby (Connected Standby), group policy
+  and the presence of hiberfil.sys before it answers. So it is normal and common
+  for the registry to say HibernateEnabled=1 while powercfg says unavailable: a
+  Modern Standby machine simply does not support classic hibernate. Do not force
+  it on then — use sleep instead. On the same machine this rule and
+  sleep-hibernate-disabled (which reads the registry) can disagree; run both to
+  tell "was turned off" from "was never supported".

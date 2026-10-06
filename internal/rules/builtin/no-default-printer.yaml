@@ -1,5 +1,6 @@
 id: no-default-printer
 title: 没有默认打印机（点打印时无从选择）
+title_en: No default printer (nothing to pick when you hit Print)
 severity: info
 symptom:
   - 没有默认打印机
@@ -27,8 +28,10 @@ blame:
 
 fix:
   - desc: 打开打印机设置挑一台设为默认
+    desc_en: Open printer settings and pick one as default
     command: start ms-settings:printers
   - desc: 顺手确认打印后台处理服务是活的
+    desc_en: While there, confirm the Print Spooler service is alive
     command: sc query spooler
 
 notes: >-
@@ -37,3 +40,11 @@ notes: >-
   这条查的是「当前实际有没有」，用的是 CIM 查询而不是注册表，
   因为注册表里残留的默认打印机名字会指向一台早就不存在的设备。
   如果你明明设过默认打印机却报这条，先去查 spooler 服务。
+
+notes_en: >-
+  No default printer is usually one of three things: it was never set, the one
+  you set was deleted or went offline, or the Print Spooler service is down so
+  nothing can be enumerated. This checks what is actually present using a CIM
+  query rather than the registry, because a stale default-printer name in the
+  registry can point at a device that no longer exists. If you definitely set a
+  default yet this trips, check the spooler service first.

@@ -1,5 +1,6 @@
 id: default-printer-hijacked
 title: 默认打印机被系统自动改掉
+title_en: Default printer gets switched by Windows automatically
 severity: info
 symptom:
   - 默认打印机
@@ -34,8 +35,10 @@ blame:
 
 fix:
   - desc: 交回控制权——让最近使用的打印机保持为默认
+    desc_en: Hand control back — let the most recently used printer stay the default
     command: reg add "HKCU\Software\Microsoft\Windows NT\CurrentVersion\Windows" /v LegacyDefaultPrinterMode /t REG_DWORD /d 1 /f
   - desc: 或者在设置里关掉同一项
+    desc_en: Or turn the same thing off from Settings
     command: start ms-settings:printers
 
 notes: >-
@@ -44,3 +47,12 @@ notes: >-
   但用户几乎都以为中毒了。
   这个值在 HKCU 下，所以是每用户的：换用户账号看不到对方的效果。
   LegacyDefaultPrinterMode=1 才是「我自己说了算」。
+
+notes_en: >-
+  Since Windows 10 1607 the default behavior is "let Windows manage the default
+  printer": it remembers the last printer used on each network and switches the
+  default when you join that network. This is OS behavior, not someone tampering
+  with your machine — yet almost every user assumes they were infected.
+  The value lives under HKCU, so it is per-user: another account on the same
+  machine will not see your setting. LegacyDefaultPrinterMode=1 is the
+  "I am in charge" value.

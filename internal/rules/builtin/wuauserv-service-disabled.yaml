@@ -1,5 +1,6 @@
 id: wuauserv-service-disabled
 title: Windows Update 服务被禁用（0x80070422 那类报错）
+title_en: Windows Update service is disabled (the 0x80070422 class of errors)
 severity: high
 symptom:
   - 0x80070422
@@ -31,10 +32,13 @@ blame:
 
 fix:
   - desc: 恢复为按需启动（Windows 需要时会自己拉起）
+    desc_en: Restore to start-on-demand (Windows pulls it up when it needs to)
     command: sc config wuauserv start= demand
   - desc: 一并恢复依赖的后台传输服务
+    desc_en: Also restore the dependent Background Intelligent Transfer service
     command: sc config bits start= delayed-auto
   - desc: 确认结果
+    desc_en: Confirm the result
     command: sc qc wuauserv
 
 notes: >-
@@ -44,3 +48,11 @@ notes: >-
   常见的写手有三类：精简工具的"禁用更新"开关、企业镜像的基线、
   以及某个你忘了的优化脚本。如果改回来过一会儿又被禁用，
   去查计划任务——有些工具是每次开机重新写一次的。
+
+notes_en: >-
+  Error 0x80070422 almost always means this: wuauserv's start type was set to
+  DISABLED. Tell "stopped" apart from "disabled" — stopped is temporary, disabled
+  is someone explicitly setting it, so read start_type, not state. Three common
+  authors: a debloat tool's "disable updates" toggle, an enterprise image
+  baseline, and some optimization script you forgot. If it gets disabled again
+  after you fix it, check Scheduled Tasks — some tools rewrite it on every boot.

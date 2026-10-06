@@ -25,18 +25,23 @@ type Engine struct {
 	cmds probe.Commands
 	src  *sources.Registry
 	now  time.Time
+	lang string
 }
 
 // New builds an engine. Both the registry and the command runner are injected
-// so every detect kind can be tested on any platform.
-func New(reg probe.Registry, cmds probe.Commands, src *sources.Registry, now time.Time) *Engine {
+// so every detect kind can be tested on any platform. lang selects the report
+// language ("en" / "zh"); an empty value defaults to "zh".
+func New(reg probe.Registry, cmds probe.Commands, src *sources.Registry, now time.Time, lang string) *Engine {
 	if now.IsZero() {
 		now = time.Now()
 	}
 	if cmds == nil {
 		cmds = probe.NewCommands()
 	}
-	return &Engine{reg: reg, cmds: cmds, src: src, now: now}
+	if lang == "" {
+		lang = "zh"
+	}
+	return &Engine{reg: reg, cmds: cmds, src: src, now: now, lang: lang}
 }
 
 // detectKinds is the set of detect kinds the engine can actually run. Anything
@@ -57,9 +62,9 @@ func supportedKind(kind string) bool {
 func (e *Engine) Evaluate(r *rules.Rule) (*model.Finding, error) {
 	f := &model.Finding{
 		RuleID:   r.ID,
-		Title:    r.Title,
+		Title:    r.LocalTitle(e.lang),
 		Subject:  r.Blame.Subject,
-		Fix:      r.Fix,
+		Fix:      localizeFix(r.Fix, e.lang),
 		Detected: false,
 	}
 	if !supportedKind(r.Detect.Kind) {
@@ -80,7 +85,7 @@ func (e *Engine) Evaluate(r *rules.Rule) (*model.Finding, error) {
 		return f, nil
 	}
 	f.Detected = true
-	f.Conclusion = r.Notes
+	f.Conclusion = r.LocalNotes(e.lang)
 	e.blame(r, f)
 	// The chain is ordered here, not by the renderer: every consumer should see
 	// the strongest evidence first, whether that is a human or a JSON diff.
@@ -380,6 +385,20 @@ func orAbsent(ok bool, val string) string {
 		return "absent"
 	}
 	return val
+}
+
+// localizeFix returns a copy of the fix steps with descriptions in the
+// requested language. The original slice is never mutated: the engine hands
+// findings to renderers that may run more than once.
+func localizeFix(steps []model.FixStep, lang string) []model.FixStep {
+	out := make([]model.FixStep, len(steps))
+	for i, s := range steps {
+		out[i] = model.FixStep{
+			Desc:    s.LocalDesc(lang),
+			Command: s.Command,
+		}
+	}
+	return out
 }
 
 // blame asks each source in the rule's order. A grade A hit stops the search:

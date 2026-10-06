@@ -120,7 +120,7 @@ func newEngine(reg *fakeRegistry) *Engine {
 
 func newEngineWith(reg *fakeRegistry, cmds probe.Commands) *Engine {
 	now := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
-	return New(reg, cmds, sources.New(), now)
+	return New(reg, cmds, sources.New(), now, "zh")
 }
 
 // A tool's own change history is grade A: it is the tool admitting it.
@@ -462,5 +462,42 @@ func TestNonRegistrySubjectStillGetsATimestampThroughRegistryPath(t *testing.T) 
 	}
 	if !f.Culprit.At.Equal(changed) {
 		t.Errorf("time = %s, want %s", f.Culprit.At, changed)
+	}
+}
+
+// The report language is a runtime choice, not a build choice. The engine must
+// pick the English fields when asked and fall back to the original text when the
+// rule has no English string or the language is zh.
+func TestEngineLocalizesToEnglishWhenRequested(t *testing.T) {
+	reg := newFakeRegistry().
+		Set("HKLM", `SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate`, "DisableWindowsUpdateAccess", "1")
+	r := rule(t, "wufb-feature-update-blocked")
+
+	en, err := New(reg, &fakeCommands{}, sources.New(), time.Now(), "en").Evaluate(r)
+	if err != nil {
+		t.Fatalf("evaluate en: %v", err)
+	}
+	if !en.Detected {
+		t.Fatal("expected the wufb rule to detect")
+	}
+	if en.Title != r.TitleEn {
+		t.Errorf("title: got %q, want %q", en.Title, r.TitleEn)
+	}
+	if en.Conclusion != r.NotesEn {
+		t.Errorf("conclusion: got %q, want %q", en.Conclusion, r.NotesEn)
+	}
+	if len(en.Fix) == 0 || en.Fix[0].Desc != r.Fix[0].DescEn {
+		t.Errorf("fix desc: got %v, want %q", en.Fix, r.Fix[0].DescEn)
+	}
+
+	zh, err := New(reg, &fakeCommands{}, sources.New(), time.Now(), "zh").Evaluate(r)
+	if err != nil {
+		t.Fatalf("evaluate zh: %v", err)
+	}
+	if zh.Title != r.Title {
+		t.Errorf("zh title: got %q, want %q", zh.Title, r.Title)
+	}
+	if zh.Conclusion != r.Notes {
+		t.Errorf("zh conclusion: got %q, want %q", zh.Conclusion, r.Notes)
 	}
 }

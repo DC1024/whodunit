@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>whodunit — 查出是谁改了这个 Windows 设置</title>
+<meta name="description" content="Windows 配置归因工具：一条命令，回答「谁、什么时候、把这台机器的某个设置改成了这样」。只读，证据分级 A/B/C/D，查不出凶手就说 unknown actor。">
+<style>
+  :root{
+    --bg:#ffffff; --bg-soft:#f6f8fb; --bg-code:#0f1720;
+    --ink:#0f1b2a; --ink-soft:#4a5a70; --ink-faint:#7b8a9c;
+    --line:#e2e8f0; --line-soft:#eef2f7;
+    --blue:#1f6feb; --blue-deep:#0b4fc4; --blue-wash:#eaf2ff;
+    --red:#c0392b; --amber:#b8860b; --green:#1e7a4d;
+    --radius:10px;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:var(--sans);background:var(--bg);color:var(--ink);
+       line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* ---------- nav ---------- */
+  nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);
+      backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;gap:18px;height:56px}
+  .brand{font-weight:700;letter-spacing:-.02em;font-size:17px;color:var(--ink)}
+  .brand small{font-weight:400;color:var(--ink-faint);font-size:12px;margin-left:8px}
+  nav .links{margin-left:auto;display:flex;gap:18px;align-items:center;font-size:14px}
+  nav .links a{color:var(--ink-soft)}
+  .langbtn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--bg);
+           color:var(--ink-soft);border-radius:6px;padding:4px 10px;cursor:pointer}
+  .langbtn:hover{border-color:var(--blue);color:var(--blue)}
+
+  /* ---------- hero ---------- */
+  header.hero{padding:64px 0 48px;border-bottom:1px solid var(--line-soft);
+      background:linear-gradient(180deg,var(--blue-wash) 0%,#fff 100%)}
+  h1{font-size:40px;line-height:1.2;margin:0 0 14px;letter-spacing:-.025em}
+  .tagline{font-size:19px;color:var(--ink-soft);margin:0 0 28px;max-width:680px}
+  .cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .btn{display:inline-block;background:var(--blue);color:#fff;border-radius:var(--radius);
+       padding:11px 22px;font-weight:600;font-size:15px;border:1px solid var(--blue)}
+  .btn:hover{background:var(--blue-deep);border-color:var(--blue-deep);text-decoration:none}
+  .btn.ghost{background:#fff;color:var(--blue)}
+  .btn.ghost:hover{background:var(--blue-wash)}
+  .meta{font-size:13px;color:var(--ink-faint)}
+  .meta code{font-family:var(--mono);background:var(--bg-soft);padding:1px 6px;border-radius:4px}
+
+  /* ---------- sections ---------- */
+  section{padding:52px 0;border-bottom:1px solid var(--line-soft)}
+  h2{font-size:26px;letter-spacing:-.02em;margin:0 0 10px}
+  .sub{color:var(--ink-soft);margin:0 0 24px;max-width:720px}
+  h3{font-size:17px;margin:26px 0 8px}
+
+  /* ---------- problem ---------- */
+  .say{display:grid;gap:14px;grid-template-columns:1fr 1fr}
+  .card{border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;background:var(--bg-soft)}
+  .card .who{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);margin-bottom:6px}
+  .card p{margin:0;font-size:15px;color:var(--ink-soft)}
+  .card.answer{background:#fff;border-color:#bcd4f7}
+
+  /* ---------- grades ---------- */
+  table{width:100%;border-collapse:collapse;font-size:14.5px;margin:8px 0}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);font-weight:600}
+  .g{font-family:var(--mono);font-weight:700;font-size:15px}
+  .gA{color:var(--red)} .gB{color:var(--amber)} .gC{color:var(--blue)} .gD{color:var(--ink-faint)}
+  .honest{border-left:3px solid var(--red);background:var(--bg-soft);padding:14px 18px;
+          border-radius:0 var(--radius) var(--radius) 0;margin-top:18px;font-size:15px}
+  .honest b{color:var(--red)}
+
+  /* ---------- terminal ---------- */
+  .term{background:var(--bg-code);color:#dbe6f2;border-radius:var(--radius);
+        padding:18px 20px;font-family:var(--mono);font-size:13px;line-height:1.75;
+        overflow-x:auto;white-space:pre}
+  .term .c{color:#7b8a9c}
+  .term .k{color:#7ee0c0}
+  .term .v{color:#f0c674}
+  .term .a{color:#ff9a8b;font-weight:600}
+  .term .p{color:#9fc5ff}
+
+  /* ---------- compare ---------- */
+  .cmp td:nth-child(2){color:var(--ink-soft)}
+  .cmp td:nth-child(3){color:var(--red)}
+
+  /* ---------- download ---------- */
+  .dl{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));margin:18px 0}
+  .dl a{display:block;border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;
+        background:#fff;color:var(--ink)}
+  .dl a:hover{border-color:var(--blue);text-decoration:none;background:var(--blue-wash)}
+  .dl .os{font-weight:600;font-size:15px}
+  .dl .fn{font-family:var(--mono);font-size:12px;color:var(--ink-faint);margin-top:3px}
+
+  /* ---------- faq ---------- */
+  details{border-bottom:1px solid var(--line-soft);padding:12px 0}
+  details summary{cursor:pointer;font-weight:600;font-size:15.5px}
+  details p{margin:10px 0 4px;color:var(--ink-soft);font-size:15px}
+
+  footer{padding:36px 0 56px;color:var(--ink-faint);font-size:13.5px}
+  footer a{color:var(--ink-soft)}
+
+  @media(max-width:640px){
+    h1{font-size:31px} .tagline{font-size:17px} .say{grid-template-columns:1fr}
+    .wrap{padding:0 18px} header.hero{padding:44px 0 34px}
+    nav .links a.hide-sm{display:none}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <span class="brand">whodunit <small id="brand-sub">配置归因</small></span>
+    <div class="links">
+      <a href="#why" class="hide-sm" data-i18n="nav.why">为什么</a>
+      <a href="#demo" class="hide-sm" data-i18n="nav.demo">演示</a>
+      <a href="#grades" class="hide-sm" data-i18n="nav.grades">证据分级</a>
+      <a href="#download" data-i18n="nav.download">下载</a>
+      <button class="langbtn" id="lang">English</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <h1 data-i18n="hero.h1">查出是谁改了这个 Windows 设置</h1>
+    <p class="tagline" data-i18n="hero.tagline">Windows 记录了值，从不记录作者。功能更新突然不再推送、休眠从电源菜单里消失——你手里只剩一个别人写下的值，却无处问「谁干的」。whodunit 就是来回答这个问题的。</p>
+    <div class="cta">
+      <a class="btn" href="#download" data-i18n="hero.cta">下载 v0.1.0</a>
+      <a class="btn ghost" href="https://github.com/DC1024/whodunit">GitHub</a>
+    </div>
+    <p class="meta" data-i18n="hero.meta">单个静态二进制 · 免安装 · 只读不写入 · MIT · 需要管理员权限的只有「改回去」，不是「查出来」</p>
+  </div>
+</header>
+
+<section id="why">
+  <div class="wrap">
+    <h2 data-i18n="why.h2">它回答的不是「有没有问题」</h2>
+    <p class="sub" data-i18n="why.sub">体检工具告诉你机器不健康，优化工具把它改成不健康。两者都不告诉你第三个问题：到底是谁动的手。</p>
+    <div class="say">
+      <div class="card">
+        <div class="who" data-i18n="why.q1.who">体检工具会告诉你</div>
+        <p data-i18n="why.q1.body">「检测到策略阻止了功能更新，建议删除注册表键 DisableWindowsUpdateAccess。」</p>
+      </div>
+      <div class="card answer">
+        <div class="who" data-i18n="why.q2.who">whodunit 会告诉你</div>
+        <p data-i18n="why.q2.body">「这个值是 Winhance 写的——它自己的变更日志里就记着这一条，时间 2026-10-04 11:10。这是它当时的原话。」</p>
+      </div>
+    </div>
+
+    <h3 data-i18n="why.table.h">为什么现有工具解决不了</h3>
+    <table class="cmp">
+      <thead><tr><th data-i18n="why.th1">工具</th><th data-i18n="why.th2">它做什么</th><th data-i18n="why.th3">为什么不够</th></tr></thead>
+      <tbody>
+        <tr><td>Process Monitor</td><td data-i18n="cmp.pm.a">实时抓注册表写入</td><td data-i18n="cmp.pm.b">必须在改动之前就开着——你之所以在读这页，正是因为它没开</td></tr>
+        <tr><td>Regshot</td><td data-i18n="cmp.rs.a">快照比对</td><td data-i18n="cmp.rs.b">只说「什么变了」，不说「谁变的」，还得先有改动前的快照</td></tr>
+        <tr><td>RegRipper</td><td data-i18n="cmp.rr.a">取证向注册表解析</td><td data-i18n="cmp.rr.b">面向调查人员的磁盘镜像，不是坐在机器前的人</td></tr>
+        <tr><td>winutil / Sophia / privacy.sexy</td><td data-i18n="cmp.tw.a">应用各种优化</td><td data-i18n="cmp.tw.b">它们往往就是「肇事者」，而不是解释者</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="wrap">
+    <h2 data-i18n="demo.h2">一次真正的点名</h2>
+    <p class="sub" data-i18n="demo.sub">下面是一次完整归真的输出（英文版，中英文可切换）。注意 A 级证据不是宣传话术——它引用了凶手自己的日志原文。</p>
+    <div class="term"><span class="c">$</span> whodunit why <span class="v">"26H2 not offered"</span> -lang en
+
+<span class="k">## [DETECTED] wufb-feature-update-blocked</span>
+
+**Feature updates are blocked by policy (26H2 will not install)**
+
+- observed: <span class="p">DisableWindowsUpdateAccess=1</span>
+- subject: <span class="p">HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate</span>
+- <span class="a">attributed to: Winhance (evidence A, tool_fingerprint)</span>
+
+| grade | source             | what it proves                                  |
+|-------|--------------------|-------------------------------------------------|
+| A     | tool_fingerprint   | Winhance's own change history names this setting |
+| C     | registry_lastwrite | the key was last written at 2026-10-04 11:10:19  |
+| D     | event_audit        | no write audit available for this value          |
+
+Details:
+
+- <span class="k">A / tool_fingerprint</span> — Winhance's own change history names this setting
+  Found <span class="p">C:\ProgramData\Winhance\Logs\ChangeHistory.txt</span>. Its change
+  history records this setting, so the tool itself confirms it made the change:
+  <span class="v">[SET] HKLM\SOFTWARE\Policies\...\DisableWindowsUpdateAccess</span>
+
+<span class="c">Revert (printed only; whodunit does not run these):</span>
+<span class="c">1.</span> reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" /v DisableWindowsUpdateAccess /f</div>
+    <p class="meta" style="margin-top:14px" data-i18n="demo.note">这段输出可以在任何机器上复现：demo/ 目录带了一套夹具（假注册表快照 + 一份真实风格的变更日志），不需要真的装过 Winhance。CI 里每次提交都跑一遍，一旦报告里不再出现 evidence A，构建就失败。</p>
+  </div>
+</section>
+
+<section id="grades">
+  <div class="wrap">
+    <h2 data-i18n="grades.h2">证据分级：等级就是承诺</h2>
+    <p class="sub" data-i18n="grades.sub">每一条证据都带等级，等级说了它到底能证明什么。多数机器上没有可查的变更日志，所以多数归因落在 B 或 C——分级体系的存在就是为了让这件事诚实。</p>
+    <table>
+      <thead><tr><th data-i18n="grades.th1">等级</th><th data-i18n="grades.th2">含义</th><th data-i18n="grades.th3">典型来源</th></tr></thead>
+      <tbody>
+        <tr><td class="g gA">A</td><td data-i18n="grades.a1">施动者被自己的记录点名</td><td data-i18n="grades.a2">工具自身的变更日志（真实读取）</td></tr>
+        <tr><td class="g gB">B</td><td data-i18n="grades.b1">强线索：工具在机器上，且确实会改这类设置</td><td data-i18n="grades.b2">安装痕迹、指纹库</td></tr>
+        <tr><td class="g gC">C</td><td data-i18n="grades.c1">只有时间——知道什么时候，不知道谁</td><td data-i18n="grades.c2">注册表键的 FILETIME</td></tr>
+        <tr><td class="g gD">D</td><td data-i18n="grades.d1">只有状态——连时间都拿不到</td><td data-i18n="grades.d2">没有源能回答</td></tr>
+      </tbody>
+    </table>
+    <div class="honest">
+      <span data-i18n="grades.honest1">最强证据只有 C 级时，报告写的是 </span><code style="font-family:var(--mono)">unknown actor</code><span data-i18n="grades.honest2">（凶手未知）。<b>不会把猜测升格成事实</b>——这是整个项目的立身之本。A 级要求凶手自己的日志里有一行点名了这个设置；日志存在、但提的是别的设置，那还是 B 级：存在不等于认罪。</span>
+    </div>
+  </div>
+</section>
+
+<section id="download">
+  <div class="wrap">
+    <h2 data-i18n="dl.h2">下载</h2>
+    <p class="sub" data-i18n="dl.sub">单个静态二进制，无安装器、无数据文件。下载后建议核对 SHA256（每个包里都带 .sha256）。</p>
+    <div class="dl">
+      <a href="https://github.com/DC1024/whodunit/releases/download/v0.1.0/whodunit-windows-amd64.zip">
+        <div class="os" data-i18n="dl.win">Windows 64 位</div>
+        <div class="fn">whodunit-windows-amd64.zip</div>
+      </a>
+      <a href="https://github.com/DC1024/whodunit/releases/download/v0.1.0/whodunit-windows-arm64.zip">
+        <div class="os" data-i18n="dl.winarm">Windows ARM64</div>
+        <div class="fn">whodunit-windows-arm64.zip</div>
+      </a>
+      <a href="https://github.com/DC1024/whodunit/releases/download/v0.1.0/whodunit-linux-amd64.tar.gz">
+        <div class="os">Linux x86-64</div>
+        <div class="fn">whodunit-linux-amd64.tar.gz</div>
+      </a>
+    </div>
+    <h3 data-i18n="dl.usage.h">用法</h3>
+    <div class="term"><span class="c">#</span> <span data-i18n="dl.u1">列出内置规则</span>
+<span class="c">$</span> whodunit rules
+
+<span class="c">#</span> <span data-i18n="dl.u2">跑一遍所有规则，报出命中的</span>
+<span class="c">$</span> whodunit scan
+
+<span class="c">#</span> <span data-i18n="dl.u3">按症状归因</span>
+<span class="c">$</span> whodunit why <span class="v">"26H2 not offered"</span>
+
+<span class="c">#</span> <span data-i18n="dl.u4">机器可读 / 换成英文报告</span>
+<span class="c">$</span> whodunit why <span class="v">"hibernate gone"</span> -lang en -json</div>
+    <p class="meta" style="margin-top:14px" data-i18n="dl.exit">退出码：<code>0</code> 没命中，<code>1</code> 有命中，<code>2</code> 用法或运行错误——可以塞进脚本和登录任务。</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2 data-i18n="faq.h2">常见问题</h2>
+    <details>
+      <summary data-i18n="faq.q1">它会改我的机器吗？</summary>
+      <p data-i18n="faq.a1">不会。它只读。报告末尾会打印「改回去」的命令，但从不执行——要不要跑，你自己决定。</p>
+    </details>
+    <details>
+      <summary data-i18n="faq.q2">需要管理员权限吗？</summary>
+      <p data-i18n="faq.a2">查不需要。读注册表、读策略、读工具日志都用普通用户权限就能做。只有真正执行回滚命令时才需要管理员。</p>
+    </details>
+    <details>
+      <summary data-i18n="faq.q3">为什么大多数时候只能查到 C 级？</summary>
+      <p data-i18n="faq.a3">因为 Windows 默认不记录注册表写入，多数机器也没有留下可查的变更日志。这时最诚实的结果就是「这个键在某某时间被写过，凶手未知」。宁可说不知道，也不编一个。</p>
+    </details>
+    <details>
+      <summary data-i18n="faq.q4">我用的优化工具不在指纹库里怎么办？</summary>
+      <p data-i18n="faq.a4">内置认得 Winhance、ShutUp10 等 6 个。不在库里的工具点不出名字——但加一个只是改 YAML 的事，见仓库里的 internal/sources/fingerprints/tools.yaml，欢迎 PR。规则同样：加一个检查 = 加一个 YAML 文件，不用写 Go 代码。</p>
+    </details>
+    <details>
+      <summary data-i18n="faq.q5">删掉键之后过一会儿又回来了？</summary>
+      <p data-i18n="faq.a5">那说明有 MDM 或计划任务在持续下发。动手前先看证据链里 policy_origin 那一条，它会区分「直接写注册表」「本地 GPO」和「MDM 下发」。</p>
+    </details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span data-i18n="foot.license">MIT 协议 · </span>
+    <a href="https://github.com/DC1024/whodunit">GitHub</a> ·
+    <a href="https://github.com/DC1024/whodunit/releases">Releases</a> ·
+    <a href="https://github.com/DC1024/whodunit#readme">Docs</a>
+    <div style="margin-top:8px" data-i18n="foot.note">whodunit 是只读的诊断工具。它不修复、不优化、不给你的电脑打分。</div>
+  </div>
+</footer>
+
+<script>
+var DICT = {
+  zh: {
+    "nav.why":"为什么","nav.demo":"演示","nav.grades":"证据分级","nav.download":"下载",
+    "brand-sub":"配置归因",
+    "hero.h1":"查出是谁改了这个 Windows 设置",
+    "hero.tagline":"Windows 记录了值，从不记录作者。功能更新突然不再推送、休眠从电源菜单里消失——你手里只剩一个别人写下的值，却无处问「谁干的」。whodunit 就是来回答这个问题的。",
+    "hero.cta":"下载 v0.1.0","hero.meta":"单个静态二进制 · 免安装 · 只读不写入 · MIT · 需要管理员权限的只有「改回去」，不是「查出来」",
+    "why.h2":"它回答的不是「有没有问题」",
+    "why.sub":"体检工具告诉你机器不健康，优化工具把它改成不健康。两者都不告诉你第三个问题：到底是谁动的手。",
+    "why.q1.who":"体检工具会告诉你",
+    "why.q1.body":"「检测到策略阻止了功能更新，建议删除注册表键 DisableWindowsUpdateAccess。」",
+    "why.q2.who":"whodunit 会告诉你",
+    "why.q2.body":"「这个值是 Winhance 写的——它自己的变更日志里就记着这一条，时间 2026-10-04 11:10。这是它当时的原话。」",
+    "why.table.h":"为什么现有工具解决不了",
+    "why.th1":"工具","why.th2":"它做什么","why.th3":"为什么不够",
+    "cmp.pm.a":"实时抓注册表写入","cmp.pm.b":"必须在改动之前就开着——你之所以在读这页，正是因为它没开",
+    "cmp.rs.a":"快照比对","cmp.rs.b":"只说「什么变了」，不说「谁变的」，还得先有改动前的快照",
+    "cmp.rr.a":"取证向注册表解析","cmp.rr.b":"面向调查人员的磁盘镜像，不是坐在机器前的人",
+    "cmp.tw.a":"应用各种优化","cmp.tw.b":"它们往往就是「肇事者」，而不是解释者",
+    "demo.h2":"一次真正的点名",
+    "demo.sub":"下面是一次完整归真的输出（英文版，中英文可切换）。注意 A 级证据不是宣传话术——它引用了凶手自己的日志原文。",
+    "demo.note":"这段输出可以在任何机器上复现：demo/ 目录带了一套夹具（假注册表快照 + 一份真实风格的变更日志），不需要真的装过 Winhance。CI 里每次提交都跑一遍，一旦报告里不再出现 evidence A，构建就失败。",
+    "grades.h2":"证据分级：等级就是承诺",
+    "grades.sub":"每一条证据都带等级，等级说了它到底能证明什么。多数机器上没有可查的变更日志，所以多数归因落在 B 或 C——分级体系的存在就是为了让这件事诚实。",
+    "grades.th1":"等级","grades.th2":"含义","grades.th3":"典型来源",
+    "grades.a1":"施动者被自己的记录点名","grades.a2":"工具自身的变更日志（真实读取）",
+    "grades.b1":"强线索：工具在机器上，且确实会改这类设置","grades.b2":"安装痕迹、指纹库",
+    "grades.c1":"只有时间——知道什么时候，不知道谁","grades.c2":"注册表键的 FILETIME",
+    "grades.d1":"只有状态——连时间都拿不到","grades.d2":"没有源能回答",
+    "grades.honest1":"最强证据只有 C 级时，报告写的是 ",
+    "grades.honest2":"（凶手未知）。不会把猜测升格成事实——这是整个项目的立身之本。A 级要求凶手自己的日志里有一行点名了这个设置；日志存在、但提的是别的设置，那还是 B 级：存在不等于认罪。",
+    "dl.h2":"下载",
+    "dl.sub":"单个静态二进制，无安装器、无数据文件。下载后建议核对 SHA256（每个包里都带 .sha256）。",
+    "dl.win":"Windows 64 位","dl.winarm":"Windows ARM64",
+    "dl.usage.h":"用法",
+    "dl.u1":"列出内置规则","dl.u2":"跑一遍所有规则，报出命中的","dl.u3":"按症状归因","dl.u4":"机器可读 / 换成英文报告",
+    "dl.exit":"退出码：0 没命中，1 有命中，2 用法或运行错误——可以塞进脚本和登录任务。",
+    "faq.h2":"常见问题",
+    "faq.q1":"它会改我的机器吗？","faq.a1":"不会。它只读。报告末尾会打印「改回去」的命令，但从不执行——要不要跑，你自己决定。",
+    "faq.q2":"需要管理员权限吗？","faq.a2":"查不需要。读注册表、读策略、读工具日志都用普通用户权限就能做。只有真正执行回滚命令时才需要管理员。",
+    "faq.q3":"为什么大多数时候只能查到 C 级？","faq.a3":"因为 Windows 默认不记录注册表写入，多数机器也没有留下可查的变更日志。这时最诚实的结果就是「这个键在某某时间被写过，凶手未知」。宁可说不知道，也不编一个。",
+    "faq.q4":"我用的优化工具不在指纹库里怎么办？","faq.a4":"内置认得 Winhance、ShutUp10 等 6 个。不在库里的工具点不出名字——但加一个只是改 YAML 的事，见仓库里的 internal/sources/fingerprints/tools.yaml，欢迎 PR。规则同样：加一个检查 = 加一个 YAML 文件，不用写 Go 代码。",
+    "faq.q5":"删掉键之后过一会儿又回来了？","faq.a5":"那说明有 MDM 或计划任务在持续下发。动手前先看证据链里 policy_origin 那一条，它会区分「直接写注册表」「本地 GPO」和「MDM 下发」。",
+    "foot.license":"MIT 协议 · ","foot.note":"whodunit 是只读的诊断工具。它不修复、不优化、不给你的电脑打分。"
+  },
+  en: {
+    "nav.why":"Why","nav.demo":"Demo","nav.grades":"Grades","nav.download":"Download",
+    "brand-sub":"configuration attribution",
+    "hero.h1":"Find out who changed a Windows setting, and when",
+    "hero.tagline":"Windows records the value. It never records the author. So when a feature update silently stops appearing, or hibernate vanishes from the power menu, you are left with a value somebody wrote and no way to ask who. whodunit answers that.",
+    "hero.cta":"Download v0.1.0","hero.meta":"Single static binary · no installer · read-only · MIT · admin is needed to undo, never to ask",
+    "why.h2":"This answers a third question",
+    "why.sub":"Health checkers tell you the machine is unhealthy. Tweakers are what made it that way. Neither one tells you who actually did it.",
+    "why.q1.who":"A health checker says",
+    "why.q1.body":"\"Policy is blocking feature updates. Recommended fix: delete the DisableWindowsUpdateAccess registry value.\"",
+    "why.q2.who":"whodunit says",
+    "why.q2.body":"\"Winhance wrote this value — its own change log has the entry, dated 2026-10-04 11:10. Here is the line, in its own words.\"",
+    "why.table.h":"Why the existing tools do not solve it",
+    "why.th1":"Tool","why.th2":"What it does","why.th3":"Why that is not enough",
+    "cmp.pm.a":"live registry write capture","cmp.pm.b":"it must be running before the change — you are reading this page because it was not",
+    "cmp.rs.a":"snapshot diff","cmp.rs.b":"tells you what changed, never who, and needs a pre-change snapshot",
+    "cmp.rr.a":"forensic registry parsing","cmp.rr.b":"built for investigators with a disk image, not for the person at the machine",
+    "cmp.tw.a":"apply tweaks","cmp.tw.b":"these are usually the culprit, not the explanation",
+    "demo.h2":"A real attribution, named",
+    "demo.sub":"Below is a real end-to-end run. Note that grade A is not marketing copy — it quotes the culprit's own log line.",
+    "demo.note":"This run is reproducible on any machine: demo/ ships a fixture (a fake registry snapshot plus a realistic change log), so no debloat tool needs to be installed. CI runs it on every commit and fails the build if the report ever stops saying evidence A.",
+    "grades.h2":"Evidence grades: the grade is a promise",
+    "grades.sub":"Every piece of evidence carries a grade, and the grade says what it can actually prove. Most machines have no change log to read, so most attributions land on B or C — the grading exists so that stays honest.",
+    "grades.th1":"Grade","grades.th2":"Means","grades.th3":"Typical source",
+    "grades.a1":"the actor is named by its own record","grades.a2":"the tool's own change log, read from disk",
+    "grades.b1":"a strong lead: the tool is here and does exactly this","grades.b2":"install traces, fingerprints",
+    "grades.c1":"time only — we know when, not who","grades.c2":"registry key FILETIME",
+    "grades.d1":"state only — even the time is unavailable","grades.d2":"no source could answer",
+    "grades.honest1":"When the best available grade is C, the report says ",
+    "grades.honest2":"It does not promote a guess to a fact — that is the whole point of the project. Grade A requires a line in the culprit's own log naming this setting; a log that exists but mentions something else stays grade B. Presence is not a confession.",
+    "dl.h2":"Download",
+    "dl.sub":"A single static binary — no installer, no data files. Check the SHA256 after downloading (each archive ships a .sha256).",
+    "dl.win":"Windows 64-bit","dl.winarm":"Windows ARM64",
+    "dl.usage.h":"Usage",
+    "dl.u1":"list the shipped rules","dl.u2":"run every rule and report what matched","dl.u3":"attribute a symptom","dl.u4":"machine-readable / English report",
+    "dl.exit":"Exit codes: 0 nothing matched, 1 something matched, 2 usage or runtime error — usable in scripts and logon tasks.",
+    "faq.h2":"FAQ",
+    "faq.q1":"Does it change anything on my machine?","faq.a1":"No. It is read-only. It prints the revert commands at the end of the report and never runs them — that decision is yours.",
+    "faq.q2":"Do I need administrator rights?","faq.a2":"Not to investigate. Reading the registry, the policy state and a tool's log works as a normal user. Admin is only needed to actually run a revert command.",
+    "faq.q3":"Why do I usually only get grade C?","faq.a3":"Because Windows does not record registry writes by default, and most machines have no change log to read. The honest answer then is \"this key was last written at such-and-such time, actor unknown\". Better unknown than invented.",
+    "faq.q4":"My tweaker is not in the fingerprint set.","faq.a4":"The shipped set knows six, including Winhance and ShutUp10. A tool that is not listed cannot be named — but adding one is a YAML edit (internal/sources/fingerprints/tools.yaml), and pull requests are welcome. Same for rules: a new check is a new YAML file, no Go code.",
+    "faq.q5":"The value came back minutes after I deleted it.","faq.a5":"Then an MDM or a scheduled task is re-applying it. Check the policy_origin line in the evidence chain first — it distinguishes a direct registry write from a local GPO and from MDM.",
+    "foot.license":"MIT · ","foot.note":"whodunit is a read-only diagnostic. It does not fix, tweak, or score your PC."
+  }
+};
+
+var cur = "zh";
+function apply(lang){
+  cur = lang;
+  document.documentElement.lang = (lang === "zh") ? "zh-CN" : "en";
+  var d = DICT[lang];
+  var nodes = document.querySelectorAll("[data-i18n]");
+  for (var i = 0; i < nodes.length; i++){
+    var k = nodes[i].getAttribute("data-i18n");
+    if (d[k] === undefined) continue;
+    // The honest box mixes prose with a <code> and a <b>, so only the
+    // text nodes are replaced there; everything else is plain text.
+    if (k === "grades.honest2"){
+      nodes[i].innerHTML = d[k].replace("does not promote a guess to a fact", "<b>does not promote a guess to a fact</b>")
+                               .replace("不会把猜测升格成事实", "<b>不会把猜测升格成事实</b>");
+    } else if (k === "dl.exit"){
+      nodes[i].innerHTML = d[k].replace(/0|1|2/g, function(m){ return "<code>" + m + "</code>"; });
+    } else {
+      nodes[i].textContent = d[k];
+    }
+  }
+  document.getElementById("lang").textContent = (lang === "zh") ? "English" : "中文";
+  document.title = (lang === "zh")
+    ? "whodunit — 查出是谁改了这个 Windows 设置"
+    : "whodunit — find out who changed a Windows setting";
+}
+document.getElementById("lang").addEventListener("click", function(){
+  apply(cur === "zh" ? "en" : "zh");
+});
+// Follow the browser on first load, the same way the CLI's -lang auto does.
+(function(){
+  var l = (navigator.language || "zh").toLowerCase();
+  apply(l.indexOf("zh") === 0 ? "zh" : "en");
+})();
+</script>
+</body>
+</html>

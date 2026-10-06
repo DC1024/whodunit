@@ -195,8 +195,8 @@ func TestGradeCWhenOnlyTimestampAvailable(t *testing.T) {
 	if !f.Culprit.At.Equal(changed) {
 		t.Errorf("time = %s, want %s", f.Culprit.At, changed)
 	}
-	if !strings.Contains(f.Culprit.CulpritLine(), "unknown actor") {
-		t.Errorf("culprit line must admit ignorance, got %q", f.Culprit.CulpritLine())
+	if !strings.Contains(f.Culprit.CulpritLine("en"), "unknown actor") {
+		t.Errorf("culprit line must admit ignorance, got %q", f.Culprit.CulpritLine("en"))
 	}
 }
 

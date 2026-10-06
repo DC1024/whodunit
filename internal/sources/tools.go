@@ -91,28 +91,38 @@ func (s *toolFingerprint) Investigate(ctx Context, subject model.Subject) ([]mod
 	for _, tool := range s.db.Tools {
 		if logged := s.matchAny(ctx, tool.ChangeLogs); logged != nil {
 			out = append(out, model.Evidence{
-				Source:  "tool_fingerprint",
-				Grade:   model.GradeA,
-				Actor:   tool.Name,
-				Summary: fmt.Sprintf("%s keeps a change history on this machine", tool.Name),
-				Detail: strings.TrimSpace(fmt.Sprintf(
-					"Found %s. This tool records its own changes, so open it and look at the "+
+				Source: "tool_fingerprint",
+				Grade:  model.GradeA,
+				Actor:  tool.Name,
+				Summary: model.Pick(ctx.Lang,
+					fmt.Sprintf("%s keeps a change history on this machine", tool.Name),
+					fmt.Sprintf("%s 在本机保留了变更历史", tool.Name)),
+				Detail: strings.TrimSpace(model.Pick(ctx.Lang,
+					fmt.Sprintf("Found %s. This tool records its own changes, so open it and look at the "+
 						"corresponding entry before reverting anything by hand.%s",
-					logged.String(), confidenceSuffix(tool))),
+						logged.String(), confidenceSuffix(tool, ctx.Lang)),
+					fmt.Sprintf("找到 %s。该工具会记录自身的变更，所以先打开它查看对应条目，"+
+						"再手动回滚任何东西。%s",
+						logged.String(), confidenceSuffix(tool, ctx.Lang)))),
 			})
 			continue
 		}
 		if marker := s.matchAny(ctx, tool.Markers); marker != nil {
 			out = append(out, model.Evidence{
-				Source:  "tool_fingerprint",
-				Grade:   model.GradeB,
-				Actor:   tool.Name,
-				Summary: fmt.Sprintf("%s is installed here and changes this kind of setting", tool.Name),
-				Detail: strings.TrimSpace(fmt.Sprintf(
-					"Found %s. This is a lead, not a conviction: the tool is present and is known to "+
+				Source: "tool_fingerprint",
+				Grade:  model.GradeB,
+				Actor:  tool.Name,
+				Summary: model.Pick(ctx.Lang,
+					fmt.Sprintf("%s is installed here and changes this kind of setting", tool.Name),
+					fmt.Sprintf("%s 已安装在本机，且会修改这类设置", tool.Name)),
+				Detail: strings.TrimSpace(model.Pick(ctx.Lang,
+					fmt.Sprintf("Found %s. This is a lead, not a conviction: the tool is present and is known to "+
 						"write values like %s, but the registry does not record who wrote it. "+
 						"Confirm against its own UI or log before acting.%s",
-					marker.String(), subject.String(), confidenceSuffix(tool))),
+						marker.String(), subject.String(), confidenceSuffix(tool, ctx.Lang)),
+					fmt.Sprintf("找到 %s。这是线索而非定罪：该工具存在，且已知会写入类似 %s 的值，"+
+						"但注册表不记录是谁写入的。行动前请对照它自己的界面或日志确认。%s",
+						marker.String(), subject.String(), confidenceSuffix(tool, ctx.Lang)))),
 			})
 		}
 	}
@@ -136,9 +146,11 @@ func (s *toolFingerprint) matchAny(ctx Context, refs []RegRef) *RegRef {
 	return nil
 }
 
-func confidenceSuffix(t ToolFingerprint) string {
+func confidenceSuffix(t ToolFingerprint, lang string) string {
 	if strings.EqualFold(t.Confidence, "verified") {
 		return ""
 	}
-	return fmt.Sprintf(" [fingerprint %s: %s]", t.ID, t.Confidence)
+	return model.Pick(lang,
+		fmt.Sprintf(" [fingerprint %s: %s]", t.ID, t.Confidence),
+		fmt.Sprintf(" [指纹 %s：%s]", t.ID, t.Confidence))
 }

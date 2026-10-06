@@ -216,7 +216,7 @@ func cmdScan(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	emit(findings, *jsonOut, stdout, stderr)
+	emit(findings, *jsonOut, lang, stdout, stderr)
 	return exitCodeFor(findings)
 }
 
@@ -254,7 +254,7 @@ func cmdWhy(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	emit(findings, *jsonOut, stdout, stderr)
+	emit(findings, *jsonOut, lang, stdout, stderr)
 	return exitCodeFor(findings)
 }
 
@@ -269,7 +269,7 @@ func investigate(rs []*rules.Rule, jsonOut bool, lang string, stdout, stderr io.
 	return findings, 0
 }
 
-func emit(findings []*model.Finding, jsonOut bool, stdout, stderr io.Writer) {
+func emit(findings []*model.Finding, jsonOut bool, lang string, stdout, stderr io.Writer) {
 	if jsonOut {
 		out, err := report.JSON(findings)
 		if err != nil {
@@ -286,7 +286,7 @@ func emit(findings []*model.Finding, jsonOut bool, stdout, stderr io.Writer) {
 		Hostname:  host,
 		OS:        runtime.GOOS + "/" + runtime.GOARCH,
 	}
-	fmt.Fprint(stdout, report.Markdown(h, findings))
+	fmt.Fprint(stdout, report.Markdown(h, findings, lang))
 }
 
 func exitCodeFor(findings []*model.Finding) int {

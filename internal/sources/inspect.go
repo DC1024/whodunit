@@ -45,15 +45,19 @@ func (registryLastWrite) Investigate(ctx Context, subject model.Subject) ([]mode
 		return nil, nil
 	}
 	age := ctx.Now.Sub(at)
+	ts := at.Format("2006-01-02 15:04:05")
 	ev := model.Evidence{
-		Source:  "registry_lastwrite",
-		Grade:   model.GradeC,
-		At:      nowOrZero(at),
-		Summary: fmt.Sprintf("%s was last written at %s", subject.String(), at.Format("2006-01-02 15:04:05")),
-		Detail: fmt.Sprintf(
-			"FILETIME of the key, %s before this run. It proves when, never who: "+
-				"any process with write access produces the same timestamp.",
-			roundDuration(age)),
+		Source: "registry_lastwrite",
+		Grade:  model.GradeC,
+		At:     nowOrZero(at),
+		Summary: model.Pick(ctx.Lang,
+			fmt.Sprintf("%s was last written at %s", subject.String(), ts),
+			fmt.Sprintf("%s 最后写入于 %s", subject.String(), ts)),
+		Detail: model.Pick(ctx.Lang,
+			fmt.Sprintf("FILETIME of the key, %s before this run. It proves when, never who: "+
+				"any process with write access produces the same timestamp.", roundDuration(age, ctx.Lang)),
+			fmt.Sprintf("这是键的 FILETIME，距本次运行 %s。它只能证明「何时」，永远不能证明「谁」："+
+				"任何有写权限的进程留下的时间戳都一样。", roundDuration(age, ctx.Lang))),
 	}
 	return []model.Evidence{ev}, nil
 }
@@ -96,22 +100,34 @@ func (policyOrigin) Investigate(ctx Context, subject model.Subject) ([]model.Evi
 	}
 	if exists {
 		return []model.Evidence{{
-			Source:  "policy_origin",
-			Grade:   model.GradeB,
-			Summary: "value lives under Policies, and this machine is MDM-enrolled (PolicyManager present)",
-			Detail: "A Policies key backed by PolicyManager is re-applied by the management client. " +
-				"Deleting the key is only a temporary fix; remove the policy at the source. " +
-				"Cross-check with: gpresult /h report.html" +
+			Source: "policy_origin",
+			Grade:  model.GradeB,
+			Summary: model.Pick(ctx.Lang,
+				"value lives under Policies, and this machine is MDM-enrolled (PolicyManager present)",
+				"值位于 Policies 下，且本机已加入 MDM 管理（存在 PolicyManager）"),
+			Detail: model.Pick(ctx.Lang,
+				"A Policies key backed by PolicyManager is re-applied by the management client. "+
+					"Deleting the key is only a temporary fix; remove the policy at the source. "+
+					"Cross-check with: gpresult /h report.html",
+				"由 PolicyManager 支撑的 Policies 键会被管理客户端持续重新下发。"+
+					"仅删除该键只是临时修复；应在源头移除策略。"+
+					"交叉核对：gpresult /h report.html") +
 				mdmDetail(mdm),
 		}}, nil
 	}
 	return []model.Evidence{{
-		Source:  "policy_origin",
-		Grade:   model.GradeC,
-		Summary: "value lives under Policies, no MDM enrollment detected",
-		Detail: "Policies keys are written by group policy, MDM, or any tool with admin rights. " +
-			"No PolicyManager hive was found, so a local GPO or a direct registry write is more likely. " +
-			"Cross-check with: gpresult /h report.html",
+		Source: "policy_origin",
+		Grade:  model.GradeC,
+		Summary: model.Pick(ctx.Lang,
+			"value lives under Policies, no MDM enrollment detected",
+			"值位于 Policies 下，未检测到 MDM 加入"),
+		Detail: model.Pick(ctx.Lang,
+			"Policies keys are written by group policy, MDM, or any tool with admin rights. "+
+				"No PolicyManager hive was found, so a local GPO or a direct registry write is more likely. "+
+				"Cross-check with: gpresult /h report.html",
+			"Policies 键由组策略、MDM 或任何有管理员权限的工具写入。"+
+				"未发现 PolicyManager 配置单元，因此更可能是本地 GPO 或直接的注册表写入。"+
+				"交叉核对：gpresult /h report.html"),
 	}}, nil
 }
 
@@ -141,19 +157,25 @@ func (eventAudit) Investigate(ctx Context, subject model.Subject) ([]model.Evide
 	// and an administrative handle, and a negative result is indistinguishable
 	// from "not enabled". Say so instead.
 	return []model.Evidence{{
-		Source:  "event_audit",
-		Grade:   model.GradeD,
-		Summary: "no write audit available for this value",
-		Detail: "Windows does not record registry writes by default. To catch the next one: " +
-			"install Sysmon with a RegSetValue rule, or enable Audit Registry (event 4657) under " +
-			"secpol.msc > Advanced Audit Policy > Object Access. Both must run before the change.",
+		Source: "event_audit",
+		Grade:  model.GradeD,
+		Summary: model.Pick(ctx.Lang,
+			"no write audit available for this value",
+			"此值没有可用的写入审计"),
+		Detail: model.Pick(ctx.Lang,
+			"Windows does not record registry writes by default. To catch the next one: "+
+				"install Sysmon with a RegSetValue rule, or enable Audit Registry (event 4657) under "+
+				"secpol.msc > Advanced Audit Policy > Object Access. Both must run before the change.",
+			"Windows 默认不记录注册表写入。要抓住下一次写入："+
+				"安装 Sysmon 并配置 RegSetValue 规则，或在 secpol.msc > 高级审核策略 > 对象访问 下"+
+				"启用「审核注册表」（事件 4657）。两者都必须在变更发生之前就位。"),
 	}}, nil
 }
 
-func roundDuration(d time.Duration) string {
+func roundDuration(d time.Duration, lang string) string {
 	switch {
 	case d < 0:
-		return "in the future (clock skew)"
+		return model.Pick(lang, "in the future (clock skew)", "在未来（时钟偏差）")
 	case d < time.Minute:
 		return fmt.Sprintf("%ds", int(d.Seconds()))
 	case d < time.Hour:

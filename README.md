@@ -69,9 +69,11 @@ language (`auto` / `en` / `zh`; default `auto`, which follows the system
 locale — an English shell gets an English report, a Chinese Windows stays
 Chinese).
 
-Every rule ships both Chinese and English copy. With `-lang en` the title, the
-explanation and the revert steps all switch to English, so the report pastes
-cleanly into an English-language forum thread.
+Every rule ships both Chinese and English copy, and the report *chrome* —
+headings, field labels (`observed` / `subject` / `attributed to`), the evidence
+table, the "nothing matched" note and the revert steps — follows the same flag.
+So `-lang en` produces a fully English report (and `-lang zh` a fully Chinese
+one), with no half-translated middle, ready to paste into a forum thread.
 
 Exit codes: `0` nothing matched, `1` something matched, `2` usage or runtime
 error. That makes it usable in a script or a logon task.

@@ -95,20 +95,40 @@ type Evidence struct {
 	Detail  string    `json:"detail,omitempty"`
 }
 
+// Pick chooses between an English and a Chinese string for the report language.
+// Only "en" is treated as English so an empty or unknown lang always falls back
+// to Chinese, matching how rule text resolves (English only when asked for).
+//
+// It lives here because the report chrome, the evidence prose and the engine
+// all need the same three-way rule and duplicating it invites drift.
+func Pick(lang, en, zh string) string {
+	if lang == "en" {
+		return en
+	}
+	return zh
+}
+
 // CulpritLine renders the evidence as a single sentence. It never guesses: if
-// there is no actor, it says so.
-func (e Evidence) CulpritLine() string {
+// there is no actor, it says so. lang selects the wording; the source name and
+// grade stay as-is because they are identifiers, not prose.
+func (e Evidence) CulpritLine(lang string) string {
 	if e.Actor != "" {
 		if !e.At.IsZero() {
-			return fmt.Sprintf("%s, %s (evidence %s, %s)", e.Actor, e.At.Format("2006-01-02 15:04:05"), e.Grade, e.Source)
+			return fmt.Sprintf(Pick(lang, "%s, %s (evidence %s, %s)", "%s，%s（证据 %s，%s）"),
+				e.Actor, e.At.Format("2006-01-02 15:04:05"), e.Grade, e.Source)
 		}
-		return fmt.Sprintf("%s (evidence %s, %s)", e.Actor, e.Grade, e.Source)
+		return fmt.Sprintf(Pick(lang, "%s (evidence %s, %s)", "%s（证据 %s，%s）"),
+			e.Actor, e.Grade, e.Source)
 	}
 	if !e.At.IsZero() {
-		return fmt.Sprintf("unknown actor, changed at %s (evidence %s, %s)",
+		return fmt.Sprintf(Pick(lang,
+			"unknown actor, changed at %s (evidence %s, %s)",
+			"未知来源，变更于 %s（证据 %s，%s）"),
 			e.At.Format("2006-01-02 15:04:05"), e.Grade, e.Source)
 	}
-	return fmt.Sprintf("unknown actor, unknown time (evidence %s, %s)", e.Grade, e.Source)
+	return fmt.Sprintf(Pick(lang,
+		"unknown actor, unknown time (evidence %s, %s)",
+		"未知来源，时间未知（证据 %s，%s）"), e.Grade, e.Source)
 }
 
 // FixStep is a revert action. whodunit prints these; it does not run them

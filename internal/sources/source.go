@@ -17,6 +17,10 @@ import (
 type Context struct {
 	Registry probe.Registry
 	Now      time.Time
+	// Lang is the report language ("en" / "zh"). Sources use it to pick the
+	// wording of the evidence they emit so a whole report reads in one language
+	// instead of switching to English halfway down.
+	Lang string
 }
 
 // Source is one evidence collector.

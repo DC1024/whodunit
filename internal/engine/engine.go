@@ -68,14 +68,19 @@ func (e *Engine) Evaluate(r *rules.Rule) (*model.Finding, error) {
 		Detected: false,
 	}
 	if !supportedKind(r.Detect.Kind) {
-		f.Unsupported = fmt.Sprintf("detect kind %q is not implemented (supported: %s)",
-			r.Detect.Kind, strings.Join(detectKinds, ", "))
+		f.Unsupported = model.Pick(e.lang,
+			fmt.Sprintf("detect kind %q is not implemented (supported: %s)",
+				r.Detect.Kind, strings.Join(detectKinds, ", ")),
+			fmt.Sprintf("检测类型 %q 尚未实现（已支持：%s）",
+				r.Detect.Kind, strings.Join(detectKinds, ", ")))
 		return f, nil
 	}
 	detected, current, err := e.detect(r)
 	if err != nil {
 		if errors.Is(err, probe.ErrUnsupported) {
-			f.Unsupported = "this needs Windows to inspect; nothing was checked"
+			f.Unsupported = model.Pick(e.lang,
+				"this needs Windows to inspect; nothing was checked",
+				"此项需要在 Windows 上检查；未进行任何检测")
 			return f, nil
 		}
 		return nil, err
@@ -408,7 +413,7 @@ func (e *Engine) blame(r *rules.Rule, f *model.Finding) {
 	if len(names) == 0 {
 		names = e.src.Names()
 	}
-	ctx := sources.Context{Registry: e.reg, Now: e.now}
+	ctx := sources.Context{Registry: e.reg, Now: e.now, Lang: e.lang}
 	for _, name := range names {
 		src, ok := e.src.Get(name)
 		if !ok {
@@ -420,7 +425,7 @@ func (e *Engine) blame(r *rules.Rule, f *model.Finding) {
 			f.Chain = append(f.Chain, model.Evidence{
 				Source:  name,
 				Grade:   model.GradeD,
-				Summary: "this source failed",
+				Summary: model.Pick(e.lang, "this source failed", "此证据源执行失败"),
 				Detail:  err.Error(),
 			})
 			continue

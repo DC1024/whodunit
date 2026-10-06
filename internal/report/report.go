@@ -3,6 +3,11 @@
 // The markdown output is designed to be pasted into a forum thread or an issue
 // as-is. That is deliberate: every pasted report is a piece of evidence that
 // somebody else can reason about without re-running the tool.
+//
+// Every piece of prose here is language-aware. The chrome (headings, field
+// labels, the "nothing matched" note) switches with -lang, matching the rule
+// text the engine already localizes, so a report reads in one language top to
+// bottom instead of flipping to English halfway down.
 package report
 
 import (
@@ -23,15 +28,17 @@ type Header struct {
 	OS        string
 }
 
-// Markdown renders findings as a paste-ready report.
-func Markdown(h Header, findings []*model.Finding) string {
+// Markdown renders findings as a paste-ready report in the given language
+// ("en" / "zh"; anything else falls back to Chinese).
+func Markdown(h Header, findings []*model.Finding, lang string) string {
 	var b strings.Builder
 	b.WriteString("# whodunit report\n\n")
-	b.WriteString(fmt.Sprintf("- generated: %s\n", h.Generated.Format("2006-01-02 15:04:05 -0700")))
+	b.WriteString(fmt.Sprintf("- %s: %s\n", model.Pick(lang, "generated", "生成时间"),
+		h.Generated.Format("2006-01-02 15:04:05 -0700")))
 	if h.Hostname != "" {
-		b.WriteString(fmt.Sprintf("- machine: %s\n", h.Hostname))
+		b.WriteString(fmt.Sprintf("- %s: %s\n", model.Pick(lang, "machine", "机器"), h.Hostname))
 	}
-	b.WriteString(fmt.Sprintf("- os: %s\n", h.OS))
+	b.WriteString(fmt.Sprintf("- %s: %s\n", model.Pick(lang, "os", "系统"), h.OS))
 	b.WriteString(fmt.Sprintf("- whodunit: %s\n\n", h.Version))
 
 	// Strongest findings first: the thing that actually explains the symptom
@@ -49,56 +56,71 @@ func Markdown(h Header, findings []*model.Finding) string {
 		}
 	}
 	if hit == 0 {
-		b.WriteString("No known cause matched. That is not the same as \"nothing is wrong\":\n")
-		b.WriteString("it means none of the shipped rules recognised this machine's state.\n")
+		b.WriteString(model.Pick(lang,
+			"No known cause matched. That is not the same as \"nothing is wrong\":\n"+
+				"it means none of the shipped rules recognised this machine's state.\n",
+			"未匹配到已知原因。这并不等于「一切正常」：\n"+
+				"只是说内置规则里没有一条能识别本机当前的状态。\n"))
 	}
 
 	for _, f := range ordered {
 		b.WriteString("\n---\n\n")
-		b.WriteString(markdownOne(f))
+		b.WriteString(markdownOne(f, lang))
 	}
 	return b.String()
 }
 
-func markdownOne(f *model.Finding) string {
+func markdownOne(f *model.Finding, lang string) string {
 	var b strings.Builder
-	status := "not detected"
-	if f.Detected {
-		status = "DETECTED"
-	}
-	if f.Unsupported != "" {
-		status = "skipped"
+	var status string
+	switch {
+	case f.Unsupported != "":
+		status = model.Pick(lang, "skipped", "跳过")
+	case f.Detected:
+		status = model.Pick(lang, "DETECTED", "命中")
+	default:
+		status = model.Pick(lang, "not detected", "未命中")
 	}
 	b.WriteString(fmt.Sprintf("## [%s] %s\n\n", status, f.RuleID))
 	if f.Title != "" {
 		b.WriteString(fmt.Sprintf("**%s**\n\n", f.Title))
 	}
 	if f.Unsupported != "" {
-		b.WriteString(fmt.Sprintf("> skipped: %s\n", f.Unsupported))
+		b.WriteString(fmt.Sprintf("> %s: %s\n", model.Pick(lang, "skipped", "已跳过"), f.Unsupported))
 		return b.String()
 	}
 	if !f.Detected {
-		b.WriteString("This rule did not match. Nothing to attribute.\n")
+		b.WriteString(model.Pick(lang,
+			"This rule did not match. Nothing to attribute.\n",
+			"此规则未命中，无需归因。\n"))
 		return b.String()
 	}
 	if f.Current != "" {
-		b.WriteString(fmt.Sprintf("- observed: `%s`\n", f.Current))
+		b.WriteString(fmt.Sprintf("- %s: `%s`\n", model.Pick(lang, "observed", "观测值"), f.Current))
 	}
 	if f.Subject.String() != "" {
-		b.WriteString(fmt.Sprintf("- subject: `%s`\n", f.Subject.String()))
+		b.WriteString(fmt.Sprintf("- %s: `%s`\n", model.Pick(lang, "subject", "对象"), f.Subject.String()))
 	}
 	if f.Conclusion != "" {
-		b.WriteString(fmt.Sprintf("- what it means: %s\n", strings.TrimSpace(f.Conclusion)))
+		b.WriteString(fmt.Sprintf("- %s: %s\n", model.Pick(lang, "what it means", "含义"),
+			strings.TrimSpace(f.Conclusion)))
 	}
 	if f.Culprit != nil {
-		b.WriteString(fmt.Sprintf("- **attributed to: %s**\n", f.Culprit.CulpritLine()))
+		b.WriteString(fmt.Sprintf("- **%s: %s**\n", model.Pick(lang, "attributed to", "归因"),
+			f.Culprit.CulpritLine(lang)))
 	} else {
-		b.WriteString("- attributed to: nothing. No source could produce evidence.\n")
+		b.WriteString(fmt.Sprintf("- %s: %s\n", model.Pick(lang, "attributed to", "归因"),
+			model.Pick(lang,
+				"nothing. No source could produce evidence.",
+				"无。没有任何证据源能给出证据。")))
 	}
 	b.WriteString("\n")
-	b.WriteString(evidenceTable(f.Chain))
+	b.WriteString(evidenceTable(f.Chain, lang))
 	if len(f.Fix) > 0 {
-		b.WriteString("\nRevert (printed only; whodunit does not run these):\n\n")
+		b.WriteString("\n")
+		b.WriteString(model.Pick(lang,
+			"Revert (printed only; whodunit does not run these):\n\n",
+			"回滚（仅打印；whodunit 不会执行）：\n\n"))
 		for i, step := range f.Fix {
 			b.WriteString(fmt.Sprintf("%d. %s\n", i+1, step.Desc))
 			if step.Command != "" {
@@ -109,9 +131,9 @@ func markdownOne(f *model.Finding) string {
 	return b.String()
 }
 
-func evidenceTable(chain []model.Evidence) string {
+func evidenceTable(chain []model.Evidence, lang string) string {
 	if len(chain) == 0 {
-		return "_no evidence collected_\n"
+		return model.Pick(lang, "_no evidence collected_\n", "_未收集到证据_\n")
 	}
 	ordered := make([]model.Evidence, len(chain))
 	copy(ordered, chain)
@@ -119,12 +141,14 @@ func evidenceTable(chain []model.Evidence) string {
 		return ordered[i].Grade.Better(ordered[j].Grade)
 	})
 	var b strings.Builder
-	b.WriteString("| grade | source | what it proves |\n")
-	b.WriteString("|---|---|---|\n")
+	b.WriteString(model.Pick(lang,
+		"| grade | source | what it proves |\n|---|---|---|\n",
+		"| 等级 | 来源 | 能证明什么 |\n|---|---|---|\n"))
 	for _, e := range ordered {
 		b.WriteString(fmt.Sprintf("| %s | %s | %s |\n", e.Grade, e.Source, oneLine(e.Summary)))
 	}
-	b.WriteString("\nDetails:\n\n")
+	b.WriteString("\n")
+	b.WriteString(model.Pick(lang, "Details:\n\n", "详情：\n\n"))
 	for _, e := range ordered {
 		b.WriteString(fmt.Sprintf("- **%s / %s** — %s\n", e.Grade, e.Source, oneLine(e.Summary)))
 		if e.Detail != "" {

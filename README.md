@@ -41,10 +41,27 @@ that was never prepared for an investigation.**
 
 ## Install
 
-Download `whodunit-windows-amd64.exe` from the
-[releases page](https://github.com/DC1024/whodunit/releases). It is a single
-static binary — no installer, no data files, no administrator rights required
-to *read*. Each archive ships a `.sha256` next to the binary; check it.
+Download the archive for your PC from the
+[releases page](https://github.com/DC1024/whodunit/releases). It holds two
+binaries, both single static files with no installer and no data files:
+
+| Binary | For |
+|---|---|
+| `whodunit.exe` | the command line — scripts, logon tasks, `-json` output |
+| `whodunit-gui.exe` | double-click, and it opens the report in your browser |
+
+The GUI is not a widget toolkit. Every native option would need cgo or a large
+dependency tree, and the point of whodunit is one static `CGO_ENABLED=0` file —
+so it is a loopback HTTP server with the page compiled in, and it never listens
+on anything but `127.0.0.1`. It shows the same report the CLI prints, generated
+by the same function, so the window and a pasted forum thread cannot disagree.
+
+Only Windows builds are published. CI does cross-compile linux/amd64, but that
+target exists to keep the non-Windows stubs honest, not to be downloaded —
+whodunit investigates Windows machines.
+
+No administrator rights are needed to *read*. Each archive ships a `.sha256`
+per binary; check it.
 
 Project page: <https://whodunit.app.workbuddy.host/>
 

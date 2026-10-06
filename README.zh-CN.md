@@ -33,9 +33,22 @@ Windows 记下了值，但从不记下作者。所以当你发现 26H2 忽然不
 
 ## 安装
 
-从 [releases 页面](https://github.com/DC1024/whodunit/releases) 下载
-`whodunit-windows-amd64.exe`。单文件静态二进制，免安装，不需要管理员权限就能读。
-每个包里都带了 `.sha256`，下载后建议核对。
+从 [releases 页面](https://github.com/DC1024/whodunit/releases) 下载对应你电脑的包，
+里面有两个二进制，都是单文件静态二进制、免安装、无数据文件：
+
+| 二进制 | 用在哪 |
+|---|---|
+| `whodunit.exe` | 命令行——脚本、登录任务、`-json` 输出 |
+| `whodunit-gui.exe` | 双击，报告直接在浏览器里打开 |
+
+GUI 没有用控件库：任何原生 GUI 方案都要 cgo 或一大坨依赖，而 whodunit 的立身之本是
+`CGO_ENABLED=0` 的单文件。所以它是本机回环 HTTP 服务 + 编译进去的页面，只监听 `127.0.0.1`，
+不对外。它显示的报告与命令行打印的是同一份（同一个函数生成），窗口里和贴到论坛里的不会打架。
+
+**只发布 Windows 版本。** CI 确实会交叉编译 linux/amd64，但那是为了保证非 Windows 的 stub 不被写坏，
+不是给你下载用的——whodunit 排查的就是 Windows 机器。
+
+不需要管理员权限就能读。每个包里每个二进制都带了 `.sha256`，下载后建议核对。
 
 项目主页：<https://whodunit.app.workbuddy.host/>
 

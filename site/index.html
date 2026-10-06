@@ -221,20 +221,20 @@ Details:
   <div class="wrap">
     <h2 data-i18n="dl.h2">下载</h2>
     <p class="sub" data-i18n="dl.sub">单个静态二进制，无安装器、无数据文件。下载后建议核对 SHA256（每个包里都带 .sha256）。</p>
+    <p class="sub" data-i18n="dl.two">每个包里有两个 exe：<code>whodunit.exe</code> 是命令行（给脚本用），
+      <code>whodunit-gui.exe</code> 双击就在浏览器里打开报告。两个都不需要安装。</p>
     <div class="dl">
-      <a href="https://github.com/DC1024/whodunit/releases/download/v0.1.0/whodunit-windows-amd64.zip">
+      <a href="https://github.com/DC1024/whodunit/releases/download/v0.1.1/whodunit-windows-amd64.zip">
         <div class="os" data-i18n="dl.win">Windows 64 位</div>
         <div class="fn">whodunit-windows-amd64.zip</div>
       </a>
-      <a href="https://github.com/DC1024/whodunit/releases/download/v0.1.0/whodunit-windows-arm64.zip">
+      <a href="https://github.com/DC1024/whodunit/releases/download/v0.1.1/whodunit-windows-arm64.zip">
         <div class="os" data-i18n="dl.winarm">Windows ARM64</div>
         <div class="fn">whodunit-windows-arm64.zip</div>
       </a>
-      <a href="https://github.com/DC1024/whodunit/releases/download/v0.1.0/whodunit-linux-amd64.tar.gz">
-        <div class="os">Linux x86-64</div>
-        <div class="fn">whodunit-linux-amd64.tar.gz</div>
-      </a>
     </div>
+    <p class="meta" data-i18n="dl.winonly">只发布 Windows 版本——whodunit 排查的就是 Windows 机器。
+      （CI 里会交叉编译 Linux，那是为了保证代码不被写坏，不是给你下载的。）</p>
     <h3 data-i18n="dl.usage.h">用法</h3>
     <div class="term"><span class="c">#</span> <span data-i18n="dl.u1">列出内置规则</span>
 <span class="c">$</span> whodunit rules
@@ -274,6 +274,10 @@ Details:
       <summary data-i18n="faq.q5">删掉键之后过一会儿又回来了？</summary>
       <p data-i18n="faq.a5">那说明有 MDM 或计划任务在持续下发。动手前先看证据链里 policy_origin 那一条，它会区分「直接写注册表」「本地 GPO」和「MDM 下发」。</p>
     </details>
+    <details>
+      <summary data-i18n="faq.q6">GUI 版是真正的窗口程序吗？</summary>
+      <p data-i18n="faq.a6">它双击就打开一个真正的窗口——不过那个窗口是你的浏览器。原生控件库要么需要 cgo、要么要拖进一大堆依赖，那就毁掉了「单文件静态二进制」这个前提。所以 GUI 是本机回环服务（只监听 127.0.0.1）+ 编译进去的页面，关掉窗口就停。</p>
+    </details>
   </div>
 </section>
 
@@ -294,7 +298,7 @@ var DICT = {
     "brand-sub":"配置归因",
     "hero.h1":"查出是谁改了这个 Windows 设置",
     "hero.tagline":"Windows 记录了值，从不记录作者。功能更新突然不再推送、休眠从电源菜单里消失——你手里只剩一个别人写下的值，却无处问「谁干的」。whodunit 就是来回答这个问题的。",
-    "hero.cta":"下载 v0.1.0","hero.meta":"单个静态二进制 · 免安装 · 只读不写入 · MIT · 需要管理员权限的只有「改回去」，不是「查出来」",
+    "hero.cta":"下载 v0.1.1","hero.meta":"单文件静态二进制 · 免安装 · 只读不写入 · MIT · 只有 Windows 版 · 需要管理员权限的只有「改回去」，不是「查出来」",
     "why.h2":"它回答的不是「有没有问题」",
     "why.sub":"体检工具告诉你机器不健康，优化工具把它改成不健康。两者都不告诉你第三个问题：到底是谁动的手。",
     "why.q1.who":"体检工具会告诉你",
@@ -322,6 +326,8 @@ var DICT = {
     "dl.h2":"下载",
     "dl.sub":"单个静态二进制，无安装器、无数据文件。下载后建议核对 SHA256（每个包里都带 .sha256）。",
     "dl.win":"Windows 64 位","dl.winarm":"Windows ARM64",
+    "dl.two":"每个包里有两个 exe：whodunit.exe 是命令行（给脚本用），whodunit-gui.exe 双击就在浏览器里打开报告。两个都不需要安装。",
+    "dl.winonly":"只发布 Windows 版本——whodunit 排查的就是 Windows 机器。（CI 里会交叉编译 Linux，那是为了保证代码不被写坏，不是给你下载的。）",
     "dl.usage.h":"用法",
     "dl.u1":"列出内置规则","dl.u2":"跑一遍所有规则，报出命中的","dl.u3":"按症状归因","dl.u4":"机器可读 / 换成英文报告",
     "dl.exit":"退出码：0 没命中，1 有命中，2 用法或运行错误——可以塞进脚本和登录任务。",
@@ -331,6 +337,7 @@ var DICT = {
     "faq.q3":"为什么大多数时候只能查到 C 级？","faq.a3":"因为 Windows 默认不记录注册表写入，多数机器也没有留下可查的变更日志。这时最诚实的结果就是「这个键在某某时间被写过，凶手未知」。宁可说不知道，也不编一个。",
     "faq.q4":"我用的优化工具不在指纹库里怎么办？","faq.a4":"内置认得 Winhance、ShutUp10 等 6 个。不在库里的工具点不出名字——但加一个只是改 YAML 的事，见仓库里的 internal/sources/fingerprints/tools.yaml，欢迎 PR。规则同样：加一个检查 = 加一个 YAML 文件，不用写 Go 代码。",
     "faq.q5":"删掉键之后过一会儿又回来了？","faq.a5":"那说明有 MDM 或计划任务在持续下发。动手前先看证据链里 policy_origin 那一条，它会区分「直接写注册表」「本地 GPO」和「MDM 下发」。",
+    "faq.q6":"GUI 版是真正的窗口程序吗？","faq.a6":"它双击就打开一个真正的窗口——不过那个窗口是你的浏览器。原生控件库要么需要 cgo、要么要拖进一大堆依赖，那就毁掉了「单文件静态二进制」这个前提。所以 GUI 是本机回环服务（只监听 127.0.0.1）+ 编译进去的页面，关掉窗口就停。",
     "foot.license":"MIT 协议 · ","foot.note":"whodunit 是只读的诊断工具。它不修复、不优化、不给你的电脑打分。"
   },
   en: {
@@ -338,7 +345,7 @@ var DICT = {
     "brand-sub":"configuration attribution",
     "hero.h1":"Find out who changed a Windows setting, and when",
     "hero.tagline":"Windows records the value. It never records the author. So when a feature update silently stops appearing, or hibernate vanishes from the power menu, you are left with a value somebody wrote and no way to ask who. whodunit answers that.",
-    "hero.cta":"Download v0.1.0","hero.meta":"Single static binary · no installer · read-only · MIT · admin is needed to undo, never to ask",
+    "hero.cta":"Download v0.1.1","hero.meta":"Single static binary · no installer · read-only · MIT · Windows only · admin is needed to undo, never to ask",
     "why.h2":"This answers a third question",
     "why.sub":"Health checkers tell you the machine is unhealthy. Tweakers are what made it that way. Neither one tells you who actually did it.",
     "why.q1.who":"A health checker says",
@@ -366,6 +373,8 @@ var DICT = {
     "dl.h2":"Download",
     "dl.sub":"A single static binary — no installer, no data files. Check the SHA256 after downloading (each archive ships a .sha256).",
     "dl.win":"Windows 64-bit","dl.winarm":"Windows ARM64",
+    "dl.two":"Each archive holds two exe files: whodunit.exe for the command line and scripts, and whodunit-gui.exe, which opens the report in your browser when you double-click it. Neither needs installing.",
+    "dl.winonly":"Windows builds only — whodunit investigates Windows machines. (CI does cross-compile Linux, but that is to keep the code honest, not for you to download.)",
     "dl.usage.h":"Usage",
     "dl.u1":"list the shipped rules","dl.u2":"run every rule and report what matched","dl.u3":"attribute a symptom","dl.u4":"machine-readable / English report",
     "dl.exit":"Exit codes: 0 nothing matched, 1 something matched, 2 usage or runtime error — usable in scripts and logon tasks.",

@@ -26,6 +26,34 @@ func TestResolveLogPathHonorsFixtureRoot(t *testing.T) {
 	}
 }
 
+// Guards the CI case: on Linux %ProgramData% is undefined, so the path keeps its
+// Windows backslashes. filepath.Base would return the whole string there, which
+// silently dropped the demo from grade A to grade C.
+func TestResolveLogPathFixtureRootWithoutWindowsVars(t *testing.T) {
+	t.Setenv("ProgramData", "")
+	os.Unsetenv("ProgramData")
+	t.Setenv(changelogRootEnv, filepath.FromSlash("/fixtures"))
+	got := ResolveLogPath(`%ProgramData%\Winhance\Logs\ChangeHistory.txt`)
+	want := filepath.Join(filepath.FromSlash("/fixtures"), "ChangeHistory.txt")
+	if got != want {
+		t.Errorf("ResolveLogPath unresolved root = %q, want %q", got, want)
+	}
+}
+
+func TestBaseNameSplitsBothSeparators(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{`%ProgramData%\Winhance\Logs\ChangeHistory.txt`, "ChangeHistory.txt"},
+		{`C:/Logs/ChangeHistory.txt`, "ChangeHistory.txt"},
+		{"ChangeHistory.txt", "ChangeHistory.txt"},
+		{`C:\Logs\`, ""},
+	}
+	for _, c := range cases {
+		if got := baseName(c.in); got != c.want {
+			t.Errorf("baseName(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestResolveLogPathExpandsDollarVars(t *testing.T) {
 	t.Setenv("APPDATA", `C:\Users\x\AppData\Roaming`)
 	got := ResolveLogPath(`$APPDATA\O&O\ShutUp10++\ShutUp10.cfg`)

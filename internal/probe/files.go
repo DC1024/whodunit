@@ -56,9 +56,24 @@ const changelogRootEnv = "WHODUNIT_CHANGELOG_ROOT"
 func ResolveLogPath(path string) string {
 	expanded := expandPercentVars(path)
 	if root := os.Getenv(changelogRootEnv); root != "" {
-		return filepath.Join(root, filepath.Base(expanded))
+		return filepath.Join(root, baseName(expanded))
 	}
 	return expanded
+}
+
+// baseName returns the last element of a path written with either separator.
+//
+// Fingerprints are authored with Windows backslashes, but whodunit's tests and
+// demo also run on Linux, where filepath.Base treats a backslash as an ordinary
+// character and would hand back the whole string. Splitting on both separators
+// keeps the fixture lookup identical on every platform — which is the entire
+// point of a reproducible demo.
+func baseName(p string) string {
+	p = strings.ReplaceAll(p, `\`, "/")
+	if i := strings.LastIndex(p, "/"); i >= 0 {
+		p = p[i+1:]
+	}
+	return p
 }
 
 // expandPercentVars expands Windows-style %VAR% references, which os.ExpandEnv

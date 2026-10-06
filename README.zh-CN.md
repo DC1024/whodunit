@@ -33,8 +33,11 @@ Windows 记下了值，但从不记下作者。所以当你发现 26H2 忽然不
 
 ## 安装
 
-从 releases 页面下载 `whodunit-windows-amd64.exe`。单文件静态二进制，免安装，
-不需要管理员权限就能读。
+从 [releases 页面](https://github.com/DC1024/whodunit/releases) 下载
+`whodunit-windows-amd64.exe`。单文件静态二进制，免安装，不需要管理员权限就能读。
+每个包里都带了 `.sha256`，下载后建议核对。
+
+项目主页：<https://whodunit.app.workbuddy.host/>
 
 ```powershell
 whodunit why "26H2 装不上"

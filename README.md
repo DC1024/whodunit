@@ -41,9 +41,12 @@ that was never prepared for an investigation.**
 
 ## Install
 
-Download `whodunit-windows-amd64.exe` from the releases page. It is a single
+Download `whodunit-windows-amd64.exe` from the
+[releases page](https://github.com/DC1024/whodunit/releases). It is a single
 static binary — no installer, no data files, no administrator rights required
-to *read*.
+to *read*. Each archive ships a `.sha256` next to the binary; check it.
+
+Project page: <https://whodunit.app.workbuddy.host/>
 
 ```powershell
 whodunit why "26H2 not offered"

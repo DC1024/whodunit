@@ -114,6 +114,22 @@ func (unavailableCommands) Output(name string, args ...string) (string, error) {
 	return "", probe.ErrUnsupported
 }
 
+// fakeFiles is an in-memory stand-in for a tool's own change-log files, keyed
+// by the path as written in the fingerprint library.
+type fakeFiles struct {
+	out map[string]string
+}
+
+func (f *fakeFiles) Available() bool { return true }
+
+func (f *fakeFiles) Read(path string) (string, bool, error) {
+	v, ok := f.out[path]
+	if !ok {
+		return "", false, nil
+	}
+	return v, true, nil
+}
+
 func newEngine(reg *fakeRegistry) *Engine {
 	return newEngineWith(reg, &fakeCommands{})
 }
@@ -123,13 +139,29 @@ func newEngineWith(reg *fakeRegistry, cmds probe.Commands) *Engine {
 	return New(reg, cmds, sources.New(), now, "zh")
 }
 
-// A tool's own change history is grade A: it is the tool admitting it.
-func TestAttributeGradeAWhenToolChangeHistoryPresent(t *testing.T) {
-	reg := newFakeRegistry().
-		Set("HKLM", `SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate`, "DisableWindowsUpdateAccess", "1").
-		SetKey("HKCU", `Software\Winhance\ChangeHistory`)
+// newEngineWithFiles injects a fake file reader so the A-grade change-log path
+// can be exercised without touching ProgramData. Tests are in-package, so
+// overriding the field the constructor filled is deliberate and safe.
+func newEngineWithFiles(reg *fakeRegistry, files probe.Files, lang string) *Engine {
+	e := New(reg, &fakeCommands{}, sources.New(), time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC), lang)
+	e.files = files
+	return e
+}
 
-	f, err := newEngine(reg).Evaluate(rule(t, "wufb-feature-update-blocked"))
+// winhanceLogPath is the fingerprint's change-log path verbatim; the fake
+// reader must answer on the same string the library declares.
+const winhanceLogPath = `%ProgramData%\Winhance\Logs\ChangeHistory.txt`
+
+// A tool's own change log that names the exact setting is grade A: it is the
+// tool admitting it, and it is the only honest source of A.
+func TestAttributeGradeAWhenToolChangeHistoryNamesTheSetting(t *testing.T) {
+	reg := newFakeRegistry().
+		Set("HKLM", `SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate`, "DisableWindowsUpdateAccess", "1")
+	log := "Winhance Change History\n" +
+		"  2026-10-04 19:10:19  SET  HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\DisableWindowsUpdateAccess : 0 -> 1\n"
+	files := &fakeFiles{out: map[string]string{winhanceLogPath: log}}
+
+	f, err := newEngineWithFiles(reg, files, "zh").Evaluate(rule(t, "wufb-feature-update-blocked"))
 	if err != nil {
 		t.Fatalf("evaluate: %v", err)
 	}
@@ -147,6 +179,25 @@ func TestAttributeGradeAWhenToolChangeHistoryPresent(t *testing.T) {
 	}
 	if f.Current == "" {
 		t.Error("expected the observed value to be reported")
+	}
+}
+
+// A change log that exists but never mentions this setting is not a confession:
+// the tool did something on this machine, but not necessarily this. It must
+// not be promoted to grade A on the strength of the file merely existing.
+func TestChangeLogThatDoesNotNameTheSettingStaysWeak(t *testing.T) {
+	reg := newFakeRegistry().
+		Set("HKLM", `SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate`, "DisableWindowsUpdateAccess", "1")
+	files := &fakeFiles{out: map[string]string{
+		winhanceLogPath: "2026-10-04 19:10:19  SET  HKCU\\Software\\SomethingElse : 0 -> 1\n",
+	}}
+
+	f, err := newEngineWithFiles(reg, files, "zh").Evaluate(rule(t, "wufb-feature-update-blocked"))
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	if f.Culprit != nil && f.Culprit.Grade == model.GradeA {
+		t.Fatalf("a log that does not name the setting must not be grade A: %v", f.Culprit)
 	}
 }
 
@@ -312,10 +363,12 @@ func TestEvidenceIsSortedStrongestFirst(t *testing.T) {
 func TestGradeAShortCircuitsFurtherSources(t *testing.T) {
 	reg := newFakeRegistry().
 		Set("HKLM", `SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate`, "DisableWindowsUpdateAccess", "1").
-		SetKey("HKCU", `Software\Winhance\ChangeHistory`).
 		SetTime("HKLM", `SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate`, time.Now().Add(-48*time.Hour))
+	files := &fakeFiles{out: map[string]string{
+		winhanceLogPath: "2026-10-04 19:10:19  SET  HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\DisableWindowsUpdateAccess : 0 -> 1\n",
+	}}
 
-	f, err := newEngine(reg).Evaluate(rule(t, "wufb-feature-update-blocked"))
+	f, err := newEngineWithFiles(reg, files, "zh").Evaluate(rule(t, "wufb-feature-update-blocked"))
 	if err != nil {
 		t.Fatalf("evaluate: %v", err)
 	}

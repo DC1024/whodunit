@@ -16,7 +16,10 @@ import (
 // Context carries everything a source is allowed to touch.
 type Context struct {
 	Registry probe.Registry
-	Now      time.Time
+	// Files reads a tool's own log files. It is how the tool_fingerprint source
+	// earns grade A: the culprit's receipt, read from disk.
+	Files probe.Files
+	Now   time.Time
 	// Lang is the report language ("en" / "zh"). Sources use it to pick the
 	// wording of the evidence they emit so a whole report reads in one language
 	// instead of switching to English halfway down.

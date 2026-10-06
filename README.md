@@ -87,13 +87,20 @@ error. That makes it usable in a script or a logon task.
 
 - observed: `DisableWindowsUpdateAccess=1`
 - subject: `HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate`
-- **attributed to: Winhance, 2026-09-03 07:41:22 (evidence A, tool_fingerprint)**
+- **attributed to: Winhance (evidence A, tool_fingerprint)**
 
 | grade | source | what it proves |
 |---|---|---|
-| A | tool_fingerprint | Winhance keeps a change history on this machine |
-| C | registry_lastwrite | the key was last written at 2026-09-03 07:41:22 |
+| A | tool_fingerprint | Winhance's own change history names this setting |
+| C | registry_lastwrite | the key was last written at 2026-10-04 11:10:19 |
 | D | event_audit | no write audit available for this value |
+
+Details:
+
+- **A / tool_fingerprint** — Winhance's own change history names this setting
+  Found `C:\ProgramData\Winhance\Logs\ChangeHistory.txt`. Its change history
+  records this setting, so the tool itself confirms it made the change:
+  `[SET] HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\DisableWindowsUpdateAccess`.
 
 Revert (printed only; whodunit does not run these):
 
@@ -103,19 +110,27 @@ Revert (printed only; whodunit does not run these):
    ```
 ```
 
+Grade A is not a promise on a slide — it is a code path that reads the tool's
+own receipt and quotes the line. `demo/` reproduces the whole chain against a
+fixture, on any machine, with no debloat tool installed.
+
 ## Evidence grades
 
 Every piece of evidence carries a grade, and the grade is a promise.
 
 | Grade | Means | Typical source |
 |---|---|---|
-| **A** | the actor is named by its own record | a tool's change history or log |
+| **A** | the actor is named by its own record | a tool's own change log, read from disk |
 | **B** | a strong lead: the tool is here and does exactly this | install traces, fingerprints |
 | **C** | time only — we know when, not who | registry key `FILETIME` |
 | **D** | state only — even the time is unavailable | no source could answer |
 
 When the best available grade is C, the report says `unknown actor`. It does
 not promote a guess to a fact. That is the whole point of the project.
+
+Grade A requires a line in the culprit's own log that names *this* setting. A
+log that exists but mentions something else stays grade B — presence is not a
+confession.
 
 ## Rules and fingerprints are data
 

@@ -21,16 +21,18 @@ import (
 
 // Engine evaluates rules against one machine.
 type Engine struct {
-	reg  probe.Registry
-	cmds probe.Commands
-	src  *sources.Registry
-	now  time.Time
-	lang string
+	reg   probe.Registry
+	cmds  probe.Commands
+	files probe.Files
+	src   *sources.Registry
+	now   time.Time
+	lang  string
 }
 
-// New builds an engine. Both the registry and the command runner are injected
-// so every detect kind can be tested on any platform. lang selects the report
-// language ("en" / "zh"); an empty value defaults to "zh".
+// New builds an engine. The registry, the command runner and the file reader
+// are injected so every detect kind and the A-grade log read can be tested on
+// any platform. lang selects the report language ("en" / "zh"); an empty value
+// defaults to "zh".
 func New(reg probe.Registry, cmds probe.Commands, src *sources.Registry, now time.Time, lang string) *Engine {
 	if now.IsZero() {
 		now = time.Now()
@@ -41,7 +43,7 @@ func New(reg probe.Registry, cmds probe.Commands, src *sources.Registry, now tim
 	if lang == "" {
 		lang = "zh"
 	}
-	return &Engine{reg: reg, cmds: cmds, src: src, now: now, lang: lang}
+	return &Engine{reg: reg, cmds: cmds, files: probe.NewFiles(), src: src, now: now, lang: lang}
 }
 
 // detectKinds is the set of detect kinds the engine can actually run. Anything
@@ -413,7 +415,7 @@ func (e *Engine) blame(r *rules.Rule, f *model.Finding) {
 	if len(names) == 0 {
 		names = e.src.Names()
 	}
-	ctx := sources.Context{Registry: e.reg, Now: e.now, Lang: e.lang}
+	ctx := sources.Context{Registry: e.reg, Files: e.files, Now: e.now, Lang: e.lang}
 	for _, name := range names {
 		src, ok := e.src.Get(name)
 		if !ok {

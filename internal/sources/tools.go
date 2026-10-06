@@ -32,12 +32,17 @@ func (r RegRef) String() string {
 }
 
 // ToolFingerprint describes the traces a known tool leaves behind.
+//
+// ChangeLogs are file paths the tool writes its own receipt to. They are what
+// makes grade A honest: the tool itself named the setting it changed, so
+// finding that setting in its log is the closest thing to a confession. Markers
+// are weaker registry traces that only prove the tool was installed here.
 type ToolFingerprint struct {
 	ID         string   `yaml:"id"`
 	Name       string   `yaml:"name"`
 	Confidence string   `yaml:"confidence"`
 	Markers    []RegRef `yaml:"markers"`
-	ChangeLogs []RegRef `yaml:"change_logs"`
+	ChangeLogs []string `yaml:"change_logs"`
 	Note       string   `yaml:"note"`
 }
 
@@ -61,11 +66,12 @@ func DefaultFingerprints() (*FingerprintDB, error) { return LoadFingerprints(bun
 // toolFingerprint looks for known tools that were installed or run here.
 //
 // Grading is deliberately conservative:
-//   - a tool's own change history  -> grade A (it recorded the change itself)
-//   - only install/run traces      -> grade B (it was here; it does this)
+//   - the tool's own change log names this exact setting -> grade A (confession)
+//   - only install/run traces                            -> grade B (it was here)
 //
 // B is never phrased as certainty. "This tool is installed and changes this
-// exact setting" is a lead, not a conviction.
+// exact setting" is a lead, not a conviction. A is only claimed when the tool's
+// own receipt mentions the subject; anything less stays B.
 type toolFingerprint struct {
 	db *FingerprintDB
 }
@@ -89,21 +95,22 @@ func (s *toolFingerprint) Investigate(ctx Context, subject model.Subject) ([]mod
 	}
 	var out []model.Evidence
 	for _, tool := range s.db.Tools {
-		if logged := s.matchAny(ctx, tool.ChangeLogs); logged != nil {
+		if line, logPath, ok := s.matchChangeLog(ctx, tool.ChangeLogs, subject); ok {
 			out = append(out, model.Evidence{
 				Source: "tool_fingerprint",
 				Grade:  model.GradeA,
 				Actor:  tool.Name,
 				Summary: model.Pick(ctx.Lang,
-					fmt.Sprintf("%s keeps a change history on this machine", tool.Name),
-					fmt.Sprintf("%s 在本机保留了变更历史", tool.Name)),
+					fmt.Sprintf("%s's own change history names this setting", tool.Name),
+					fmt.Sprintf("%s 自己的变更历史点名了这项设置", tool.Name)),
 				Detail: strings.TrimSpace(model.Pick(ctx.Lang,
-					fmt.Sprintf("Found %s. This tool records its own changes, so open it and look at the "+
-						"corresponding entry before reverting anything by hand.%s",
-						logged.String(), confidenceSuffix(tool, ctx.Lang)),
-					fmt.Sprintf("找到 %s。该工具会记录自身的变更，所以先打开它查看对应条目，"+
-						"再手动回滚任何东西。%s",
-						logged.String(), confidenceSuffix(tool, ctx.Lang)))),
+					fmt.Sprintf("Found %s. Its change history records this setting, so the tool itself "+
+						"confirms it made the change: %q. Open the tool and review that entry before "+
+						"reverting anything by hand.%s",
+						logPath, line, confidenceSuffix(tool, ctx.Lang)),
+					fmt.Sprintf("找到 %s。它的变更历史记录了这一项设置，等于工具自己确认做了这次修改：%q。"+
+						"回滚前先打开该工具查看这条记录。%s",
+						logPath, line, confidenceSuffix(tool, ctx.Lang)))),
 			})
 			continue
 		}
@@ -127,6 +134,79 @@ func (s *toolFingerprint) Investigate(ctx Context, subject model.Subject) ([]mod
 		}
 	}
 	return out, nil
+}
+
+// matchChangeLog reads each of the tool's log files and returns the first line
+// that names the subject, so the report can quote the tool's own words.
+func (s *toolFingerprint) matchChangeLog(ctx Context, logs []string, subject model.Subject) (line, path string, ok bool) {
+	if ctx.Files == nil || !ctx.Files.Available() {
+		return "", "", false
+	}
+	needles := subjectNeedles(subject)
+	if len(needles) == 0 {
+		return "", "", false
+	}
+	for _, p := range logs {
+		content, exists, err := ctx.Files.Read(p)
+		if err != nil || !exists {
+			continue
+		}
+		if l, found := firstMentioningLine(content, needles); found {
+			return l, probe.ResolveLogPath(p), true
+		}
+	}
+	return "", "", false
+}
+
+// firstMentioningLine scans a change log for a line that references the
+// subject. It returns the trimmed line so it can be quoted verbatim in the
+// report rather than summarized into something less checkable.
+func firstMentioningLine(content string, needles []string) (string, bool) {
+	for _, raw := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(strings.TrimRight(raw, "\r"))
+		if line == "" {
+			continue
+		}
+		lower := strings.ToLower(strings.ReplaceAll(line, "/", `\`))
+		matched := true
+		for _, n := range needles {
+			if !strings.Contains(lower, n) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			if len(line) > 200 {
+				line = line[:200] + "..."
+			}
+			return line, true
+		}
+	}
+	return "", false
+}
+
+// subjectNeedles lists the strings a tool's own log would contain for this
+// subject. The registry path is the anchor; a value name is only added as a
+// second required needle when it is specific enough to cut false positives.
+//
+// For a non-registry subject (service, power setting, printer) Path holds the
+// short identifier — "wuauserv", "hibernate" — and RegistryPath holds where it
+// is actually configured. A tool's log writes the registry path, so that is the
+// one to match on, exactly as registry_lastwrite already does.
+func subjectNeedles(subject model.Subject) []string {
+	base := subject.Path
+	if subject.Kind != "registry_key" {
+		base = subject.RegistryPath
+	}
+	if base == "" {
+		return nil
+	}
+	norm := strings.ToLower(strings.ReplaceAll(base, "/", `\`))
+	needles := []string{norm}
+	if subject.Value != "" && len([]rune(subject.Value)) >= 6 {
+		needles = append(needles, strings.ToLower(subject.Value))
+	}
+	return needles
 }
 
 func (s *toolFingerprint) matchAny(ctx Context, refs []RegRef) *RegRef {

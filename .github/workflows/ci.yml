@@ -79,3 +79,30 @@ jobs:
 
       - name: Every embedded rule parses and is reachable
         run: go test ./internal/rules/ -run 'TestLoadEmbeddedFindsShippedRules|TestEveryRuleIsReachableByQuery' -v
+
+  # Grade A is whodunit's whole reason to exist: the culprit's own record naming
+  # the setting. That path reads a tool's log file, so it is easy to break
+  # silently. The demo runs it end to end against a fixture and fails the build
+  # if the report ever stops saying "evidence A".
+  demo:
+    name: A-grade attribution demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        env:
+          CGO_ENABLED: 0
+        run: go build -o dist/whodunit-linux-amd64 ./cmd/whodunit
+
+      - name: Run the demo and assert grade A
+        run: |
+          out="$(LANG_CODE=en bash demo/run.sh)"
+          echo "$out"
+          echo "$out" | grep -q 'evidence A' || { echo "::error::demo did not produce grade A"; exit 1; }
+          echo "$out" | grep -q '"grade": "A"' || { echo "::error::JSON did not carry grade A"; exit 1; }

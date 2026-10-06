@@ -1,0 +1,21 @@
+{
+  "keys": [
+    "HKCU\\Software\\Winhance",
+    "HKCU\\Software\\Winhance\\Settings"
+  ],
+  "values": [
+    {
+      "hive": "HKLM",
+      "path": "SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate",
+      "name": "DisableWindowsUpdateAccess",
+      "value": "1"
+    }
+  ],
+  "last_write": [
+    {
+      "hive": "HKLM",
+      "path": "SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate",
+      "at": "2026-10-04T11:10:19Z"
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+=== scenario: Winhance blocked Windows Update, months ago ===
+    observed: DisableWindowsUpdateAccess = 1
+    question: who wrote it?
+
+--- step 1: whodunit rules (does any rule cover this symptom?) ---
+default-printer-hijacked         默认打印机被系统自动改掉
+                                 try: whodunit why "默认打印机"
+hibernate-unavailable            休眠不可用（powercfg /a 里没有 Hibernate）
+                                 try: whodunit why "休眠"
+no-default-printer               没有默认打印机（点打印时无从选择）
+                                 try: whodunit why "没有默认打印机"
+sleep-hibernate-disabled         休眠被关掉（powercfg /a 里没有 Hibernate、合盖行为异常）
+                                 try: whodunit why "休眠"
+wuauserv-service-disabled        Windows Update 服务被禁用（0x80070422 那类报错）
+                                 try: whodunit why "0x80070422"
+wufb-feature-update-blocked      功能更新被策略挡住（26H2 这类大版本装不上）
+                                 try: whodunit why "26h2"
+
+--- step 2: whodunit why "26H2" ---
+# whodunit report
+
+- 生成时间: 2026-10-06 19:16:55 +0800
+- 机器: DC-PC
+- 系统: windows/amd64
+- whodunit: dev
+
+
+---
+
+## [命中] wufb-feature-update-blocked
+
+**功能更新被策略挡住（26H2 这类大版本装不上）**
+
+- 观测值: `DisableWindowsUpdateAccess=1`
+- 对象: `HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate`
+- 含义: 三个值任意一个为真，大版本升级就不会出现在 Windows Update 里。它们不在默认安装里， 一定是某个东西写进去的：组策略、MDM、或者某个优化/精简工具。 注意顺序——如果是 MDM 或计划任务在持续下发，删了键过一会儿还会回来， 所以先看证据链里 policy_origin 那一条再动手。
+- **归因: Winhance（证据 A，tool_fingerprint）**
+
+| 等级 | 来源 | 能证明什么 |
+|---|---|---|
+| A | tool_fingerprint | Winhance 自己的变更历史点名了这项设置 |
+
+详情：
+
+- **A / tool_fingerprint** — Winhance 自己的变更历史点名了这项设置
+  找到 C:\Users\15657.DC-PC\WorkBuddy\2026-10-06-00-45-04\whodunit\demo\ChangeHistory.txt。它的变更历史记录了这一项设置，等于工具自己确认做了这次修改："[SET] HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\DisableWindowsUpdateAccess"。回滚前先打开该工具查看这条记录。 [指纹 winhance：unverified]
+
+回滚（仅打印；whodunit 不会执行）：
+
+1. 删除「禁止访问 Windows Update」策略值
+   ```
+   reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" /v DisableWindowsUpdateAccess /f
+   ```
+2. 删除「关闭自动更新」策略值
+   ```
+   reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoUpdate /f
+   ```
+3. 解除版本钉死
+   ```
+   reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" /v TargetReleaseVersion /f
+   ```
+4. 让策略立刻生效（或重启）
+   ```
+   gpupdate /force
+   ```
+
+--- step 3: same, as JSON (grade A is machine-readable too) ---
+[
+  {
+    "rule_id": "wufb-feature-update-blocked",
+    "title": "功能更新被策略挡住（26H2 这类大版本装不上）",
+    "detected": true,
+    "conclusion": "三个值任意一个为真，大版本升级就不会出现在 Windows Update 里。它们不在默认安装里， 一定是某个东西写进去的：组策略、MDM、或者某个优化/精简工具。 注意顺序——如果是 MDM 或计划任务在持续下发，删了键过一会儿还会回来， 所以先看证据链里 policy_origin 那一条再动手。",
+    "subject": {
+      "kind": "registry_key",
+      "path": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate",
+      "value": ""
+    },
+    "current": "DisableWindowsUpdateAccess=1",
+    "culprit": {
+      "source": "tool_fingerprint",
+      "grade": "A",
+      "actor": "Winhance",
+      "at": "0001-01-01T00:00:00Z",
+      "summary": "Winhance 自己的变更历史点名了这项设置",
+      "detail": "找到 C:\\Users\\15657.DC-PC\\WorkBuddy\\2026-10-06-00-45-04\\whodunit\\demo\\ChangeHistory.txt。它的变更历史记录了这一项设置，等于工具自己确认做了这次修改：\"[SET] HKLM\\\\SOFTWARE\\\\Policies\\\\Microsoft\\\\Windows\\\\WindowsUpdate\\\\DisableWindowsUpdateAccess\"。回滚前先打开该工具查看这条记录。 [指纹 winhance：unverified]"
+    },
+    "evidence_chain": [
+      {
+        "source": "tool_fingerprint",
+        "grade": "A",
+        "actor": "Winhance",
+        "at": "0001-01-01T00:00:00Z",
+        "summary": "Winhance 自己的变更历史点名了这项设置",
+        "detail": "找到 C:\\Users\\15657.DC-PC\\WorkBuddy\\2026-10-06-00-45-04\\whodunit\\demo\\ChangeHistory.txt。它的变更历史记录了这一项设置，等于工具自己确认做了这次修改：\"[SET] HKLM\\\\SOFTWARE\\\\Policies\\\\Microsoft\\\\Windows\\\\WindowsUpdate\\\\DisableWindowsUpdateAccess\"。回滚前先打开该工具查看这条记录。 [指纹 winhance：unverified]"
+      }
+    ],
+    "fix": [
+      {
+        "desc": "删除「禁止访问 Windows Update」策略值",
+        "command": "reg delete \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\" /v DisableWindowsUpdateAccess /f"
+      },
+      {
+        "desc": "删除「关闭自动更新」策略值",
+        "command": "reg delete \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU\" /v NoAutoUpdate /f"
+      },
+      {
+        "desc": "解除版本钉死",
+        "command": "reg delete \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\" /v TargetReleaseVersion /f"
+      },
+      {
+        "desc": "让策略立刻生效（或重启）",
+        "command": "gpupdate /force"
+      }
+    ]
+  }
+]

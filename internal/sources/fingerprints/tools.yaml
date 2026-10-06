@@ -5,6 +5,13 @@
 # are the usual suspects, so matching one here turns "something changed this"
 # into "this program was here, and it does exactly that".
 #
+# Two kinds of trace, and the grade each earns:
+#   markers      - registry keys that prove the tool ran here.              -> B
+#   change_logs  - a file the tool writes its own record to. When a log line
+#                  names the exact setting under investigation, the tool is
+#                  naming itself: that is the only honest source of grade A.
+#                  Paths may use %ProgramData% / %LOCALAPPDATA% / %APPDATA%.
+#
 # Honesty contract:
 #   confidence: verified   - the path was confirmed on a real machine.
 #   confidence: unverified - derived from docs or source; may not exist on
@@ -19,11 +26,14 @@ tools:
       - {hive: HKCU, path: 'Software\Winhance'}
       - {hive: HKLM, path: 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Winhance'}
     change_logs:
-      - {hive: HKCU, path: 'Software\Winhance\ChangeHistory'}
+      # Release 27 (v26.06.12) added ChangeHistory.txt under ProgramData\Winhance\Logs.
+      # Records every setting change with before/after values and every app install.
+      - '%ProgramData%\Winhance\Logs\ChangeHistory.txt'
     note: >-
       Winhance ships an answer-file driven debloat and applies its own Windows
-      Update and power settings. Its Windows Configurations view lists every
-      toggle it changed, which is the fastest way to revert selectively.
+      Update and power settings. Since Release 27 it keeps a ChangeHistory.txt
+      receipt; the More menu opens it, and it is the fastest way to revert
+      selectively.
 
   - id: unattended-winstall
     name: UnattendedWinstall
@@ -63,7 +73,10 @@ tools:
     markers:
       - {hive: HKLM, path: 'SOFTWARE\O&O\ShutUp10'}
       - {hive: HKLM, path: 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\O&O ShutUp10'}
-    change_logs: []
+    change_logs:
+      # ShutUp10 keeps a settings state file next to its per-user data.
+      - '%APPDATA%\O&O\ShutUp10++\ShutUp10.cfg'
+      - '%APPDATA%\O&O\ShutUp10\ShutUp10.cfg'
     note: >-
       Writes a large set of privacy and telemetry policy keys. ShutUp10 keeps
       its own state so individual settings can be undone from its UI.

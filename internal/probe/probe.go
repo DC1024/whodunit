@@ -8,6 +8,7 @@ package probe
 
 import (
 	"errors"
+	"os"
 	"time"
 )
 
@@ -27,7 +28,18 @@ type Registry interface {
 }
 
 // NewRegistry returns the registry implementation for the running platform.
-func NewRegistry() Registry { return newRegistry() }
+//
+// If WHODUNIT_REGISTRY_FIXTURE points at a readable JSON file, that fixture is
+// returned instead of the live hive. This is a testing/demo hook only; in
+// normal use the variable is unset and the real registry is read.
+func NewRegistry() Registry {
+	if path := os.Getenv("WHODUNIT_REGISTRY_FIXTURE"); path != "" {
+		if reg, err := loadFixtureRegistry(path); err == nil {
+			return reg
+		}
+	}
+	return newRegistry()
+}
 
 // SplitHive breaks "HKLM\SOFTWARE\Policies" into ("HKLM", "SOFTWARE\Policies").
 func SplitHive(path string) (hive, rest string) {
